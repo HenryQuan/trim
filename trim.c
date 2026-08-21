@@ -185,8 +185,11 @@ static void read_lines(const char *path, int start, int end) {
                 fwrite(line, 1, rem, stdout);
             }
             truncated = 1;
-            while (fgets(line, sizeof(line), f))
+            while (fgets(line, sizeof(line), f)) {
+                lineno++;
+                if (end > 0 && lineno > end) break;
                 total += strlen(line);
+            }
             break;
         }
         printf("%d: %s", lineno, line);
@@ -196,9 +199,13 @@ static void read_lines(const char *path, int start, int end) {
     if (truncated) printf(HINT, MAX_CHARS, total);
 }
 
-static void cmd_outline(const char *file) {
-    char *args[] = {"ast-grep", "outline", (char*)file, "--color", "never", NULL};
-    run_cmd(args, 5);
+static void cmd_outline(int argc, char **argv) {
+    char *args[256]; int n = 0;
+    args[n++] = "ast-grep"; args[n++] = "outline";
+    for (int i = 2; i < argc && n < 255; i++) args[n++] = argv[i];
+    args[n++] = "--color"; args[n++] = "never";
+    args[n] = NULL;
+    run_cmd(args, n);
 }
 
 static void cmd_diff(const char *file) {
@@ -250,7 +257,7 @@ int main(int argc, char **argv) {
 
     if (!strcmp(cmd, "outline")) {
         if (argc < 3) { fprintf(stderr, "error: usage: trim outline <file>\n"); return 1; }
-        cmd_outline(argv[2]);
+        cmd_outline(argc, argv);
         return 0;
     }
 

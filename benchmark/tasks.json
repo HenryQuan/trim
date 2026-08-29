@@ -1,0 +1,174 @@
+[
+ {
+  "instance_id": "django__django-11564",
+  "repo": "django/django",
+  "url": "https://github.com/django/django.git",
+  "dir": "task01",
+  "base_commit": "580e644f24f1c5ae5b94784fb73a9953a178fd26",
+  "problem_statement": "Add support for SCRIPT_NAME in STATIC_URL and MEDIA_URL\nDescription\n\t \n\t\t(last modified by Rostyslav Bryzgunov)\n\t \nBy default, {% static '...' %} tag just appends STATIC_URL in the path. When running on sub-path, using SCRIPT_NAME WSGI param, it results in incorrect static URL - it doesn't prepend SCRIPT_NAME prefix.\nThis problem can be solved with prepending SCRIPT_NAME to STATIC_URL in settings.py but that doesn't work when SCRIPT_NAME is a dynamic value.\nThis can be easily added into default Django static tag and django.contrib.staticfiles tag as following:\ndef render(self, context):\n\turl = self.url(context)\n\t# Updating url here with request.META['SCRIPT_NAME'] \n\tif self.varname is None:\n\t\treturn url\n\tcontext[self.varname] = url\n\t\treturn ''\nOn more research I found that FileSystemStorage and StaticFilesStorage ignores SCRIPT_NAME as well. \nWe might have to do a lot of changes but I think it's worth the efforts.\n",
+  "FAIL_TO_PASS": [
+   "test_add_script_name_prefix (settings_tests.tests.MediaURLStaticURLPrefixTest)",
+   "test_not_prefixed (settings_tests.tests.MediaURLStaticURLPrefixTest)"
+  ],
+  "gold_files": [
+   "django/conf/__init__.py"
+  ]
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-11281",
+  "repo": "scikit-learn/scikit-learn",
+  "url": "https://github.com/scikit-learn/scikit-learn.git",
+  "dir": "task02",
+  "base_commit": "4143356c3c51831300789e4fdf795d83716dbab6",
+  "problem_statement": "Should mixture models have a clusterer-compatible interface\nMixture models are currently a bit different. They are basically clusterers, except they are probabilistic, and are applied to inductive problems unlike many clusterers. But they are unlike clusterers in API:\r\n* they have an `n_components` parameter, with identical purpose to `n_clusters`\r\n* they do not store the `labels_` of the training data\r\n* they do not have a `fit_predict` method\r\n\r\nAnd they are almost entirely documented separately.\r\n\r\nShould we make the MMs more like clusterers?\n",
+  "FAIL_TO_PASS": [
+   "sklearn/mixture/tests/test_bayesian_mixture.py::test_bayesian_mixture_fit_predict",
+   "sklearn/mixture/tests/test_gaussian_mixture.py::test_gaussian_mixture_fit_predict"
+  ],
+  "gold_files": [
+   "sklearn/mixture/base.py"
+  ]
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-25500",
+  "repo": "scikit-learn/scikit-learn",
+  "url": "https://github.com/scikit-learn/scikit-learn.git",
+  "dir": "task03",
+  "base_commit": "4db04923a754b6a2defa1b172f55d492b85d165e",
+  "problem_statement": "CalibratedClassifierCV doesn't work with `set_config(transform_output=\"pandas\")`\n### Describe the bug\r\n\r\nCalibratedClassifierCV with isotonic regression doesn't work when we previously set `set_config(transform_output=\"pandas\")`.\r\nThe IsotonicRegression seems to return a dataframe, which is a problem for `_CalibratedClassifier`  in `predict_proba` where it tries to put the dataframe in a numpy array row `proba[:, class_idx] = calibrator.predict(this_pred)`.\r\n\r\n### Steps/Code to Reproduce\r\n\r\n```python\r\nimport numpy as np\r\nfrom sklearn import set_config\r\nfrom sklearn.calibration import CalibratedClassifierCV\r\nfrom sklearn.linear_model import SGDClassifier\r\n\r\nset_config(transform_output=\"pandas\")\r\nmodel = CalibratedClassifierCV(SGDClassifier(), method='isotonic')\r\nmodel.fit(np.arange(90).reshape(30, -1), np.arange(30) % 2)\r\nmodel.predict(np.arange(90).reshape(30, -1))\r\n```\r\n\r\n### Expected Results\r\n\r\nIt should not crash.\r\n\r\n### Actual Results\r\n\r\n```\r\n../core/model_trainer.py:306: in train_model\r\n    cv_predictions = cross_val_predict(pipeline,\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/model_selection/_validation.py:968: in cross_val_predict\r\n    predictions = parallel(\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:1085: in __call__\r\n    if self.dispatch_one_batch(iterator):\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:901: in dispatch_one_batch\r\n    self._dispatch(tasks)\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:819: in _dispatch\r\n    job = self._backend.apply_async(batch, callback=cb)\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/_parallel_backends.py:208: in apply_async\r\n    result = ImmediateResult(func)\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/_parallel_backends.py:597: in __init__\r\n    self.results = batch()\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:288: in __call__\r\n    return [func(*args, **kwargs)\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:288: in <listcomp>\r\n    return [func(*args, **kwargs)\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/utils/fixes.py:117: in __call__\r\n    return self.function(*args, **kwargs)\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/model_selection/_validation.py:1052: in _fit_and_predict\r\n    predictions = func(X_test)\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/pipeline.py:548: in predict_proba\r\n    return self.steps[-1][1].predict_proba(Xt, **predict_proba_params)\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/calibration.py:477: in predict_proba\r\n    proba = calibrated_classifier.predict_proba(X)\r\n../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/calibration.py:764: in predict_proba\r\n    proba[:, class_idx] = calibrator.predict(this_pred)\r\nE   ValueError: could not broadcast input array from shape (20,1) into shape (20,)\r\n```\r\n\r\n### Versions\r\n\r\n```shell\r\nSystem:\r\n    python: 3.9.15 (main, Nov 24 2022, 14:31:59)  [GCC 11.2.0]\r\nexecutable: /home/philippe/.anaconda3/envs/strategy-training/bin/python\r\n   machine: Linux-5.15.0-57-generic-x86_64-with-glibc2.31\r\n\r\nPython dependencies:\r\n      sklearn: 1.2.0\r\n          pip: 22.2.2\r\n   setuptools: 62.3.2\r\n        numpy: 1.23.5\r\n        scipy: 1.9.3\r\n       Cython: None\r\n       pandas: 1.4.1\r\n   matplotlib: 3.6.3\r\n       joblib: 1.2.0\r\nthreadpoolctl: 3.1.0\r\n\r\nBuilt with OpenMP: True\r\n\r\nthreadpoolctl info:\r\n       user_api: openmp\r\n   internal_api: openmp\r\n         prefix: libgomp\r\n       filepath: /home/philippe/.anaconda3/envs/strategy-training/lib/python3.9/site-packages/scikit_learn.libs/libgomp-a34b3233.so.1.0.0\r\n        version: None\r\n    num_threads: 12\r\n\r\n       user_api: blas\r\n   internal_api: openblas\r\n         prefix: libopenblas\r\n       filepath: /home/philippe/.anaconda3/envs/strategy-training/lib/python3.9/site-packages/numpy.libs/libopenblas64_p-r0-742d56dc.3.20.so\r\n        version: 0.3.20\r\nthreading_layer: pthreads\r\n   architecture: Haswell\r\n    num_threads: 12\r\n\r\n       user_api: blas\r\n   internal_api: openblas\r\n         prefix: libopenblas\r\n       filepath: /home/philippe/.anaconda3/envs/strategy-training/lib/python3.9/site-packages/scipy.libs/libopenblasp-r0-41284840.3.18.so\r\n        version: 0.3.18\r\nthreading_layer: pthreads\r\n   architecture: Haswell\r\n    num_threads: 12\r\n```\r\n\n",
+  "FAIL_TO_PASS": [
+   "sklearn/tests/test_isotonic.py::test_isotonic_regression_output_predict"
+  ],
+  "gold_files": [
+   "sklearn/isotonic.py"
+  ]
+ },
+ {
+  "instance_id": "django__django-11283",
+  "repo": "django/django",
+  "url": "https://github.com/django/django.git",
+  "dir": "task04",
+  "base_commit": "08a4ee06510ae45562c228eefbdcaac84bd38c7a",
+  "problem_statement": "Migration auth.0011_update_proxy_permissions fails for models recreated as a proxy.\nDescription\n\t \n\t\t(last modified by Mariusz Felisiak)\n\t \nI am trying to update my project to Django 2.2. When I launch python manage.py migrate, I get this error message when migration auth.0011_update_proxy_permissions is applying (full stacktrace is available \u200bhere):\ndjango.db.utils.IntegrityError: duplicate key value violates unique constraint \"idx_18141_auth_permission_content_type_id_01ab375a_uniq\" DETAIL: Key (co.ntent_type_id, codename)=(12, add_agency) already exists.\nIt looks like the migration is trying to re-create already existing entries in the auth_permission table. At first I though it cloud because we recently renamed a model. But after digging and deleting the entries associated with the renamed model from our database in the auth_permission table, the problem still occurs with other proxy models.\nI tried to update directly from 2.0.13 and 2.1.8. The issues appeared each time. I also deleted my venv and recreated it without an effect.\nI searched for a ticket about this on the bug tracker but found nothing. I also posted this on \u200bdjango-users and was asked to report this here.\n",
+  "FAIL_TO_PASS": [
+   "test_migrate_with_existing_target_permission (auth_tests.test_migrations.ProxyModelWithSameAppLabelTests)"
+  ],
+  "gold_files": [
+   "django/contrib/auth/migrations/0011_update_proxy_permissions.py"
+  ]
+ },
+ {
+  "instance_id": "sympy__sympy-21055",
+  "repo": "sympy/sympy",
+  "url": "https://github.com/sympy/sympy.git",
+  "dir": "task05",
+  "base_commit": "748ce73479ee2cd5c861431091001cc18943c735",
+  "problem_statement": "`refine()` does not understand how to simplify complex arguments\nJust learned about the refine-function, which would come in handy frequently for me.  But\r\n`refine()` does not recognize that argument functions simplify for real numbers.\r\n\r\n```\r\n>>> from sympy import *                                                     \r\n>>> var('a,x')                                                              \r\n>>> J = Integral(sin(x)*exp(-a*x),(x,0,oo))                                     \r\n>>> J.doit()\r\n\tPiecewise((1/(a**2 + 1), 2*Abs(arg(a)) < pi), (Integral(exp(-a*x)*sin(x), (x, 0, oo)), True))\r\n>>> refine(J.doit(),Q.positive(a))                                                 \r\n        Piecewise((1/(a**2 + 1), 2*Abs(arg(a)) < pi), (Integral(exp(-a*x)*sin(x), (x, 0, oo)), True))\r\n>>> refine(abs(a),Q.positive(a))                                            \r\n\ta\r\n>>> refine(arg(a),Q.positive(a))                                            \r\n\targ(a)\r\n```\r\nI cann't find any open issues identifying this.  Easy to fix, though.\r\n\r\n\n",
+  "FAIL_TO_PASS": [
+   "test_arg"
+  ],
+  "gold_files": [
+   "sympy/assumptions/refine.py"
+  ]
+ },
+ {
+  "instance_id": "sympy__sympy-18835",
+  "repo": "sympy/sympy",
+  "url": "https://github.com/sympy/sympy.git",
+  "dir": "task06",
+  "base_commit": "516fa83e69caf1e68306cfc912a13f36c434d51c",
+  "problem_statement": "uniq modifies list argument\nWhen you iterate over a dictionary or set and try to modify it while doing so you get an error from Python:\r\n```python\r\n>>> multiset('THISTLE')\r\n{'T': 2, 'H': 1, 'I': 1, 'S': 1, 'L': 1, 'E': 1}\r\n>>> for i in _:\r\n...   _.pop(i)\r\n...\r\n2\r\nTraceback (most recent call last):\r\n  File \"<stdin>\", line 1, in <module>\r\nRuntimeError: dictionary changed size during iteration\r\n```\r\nIt would be good to do the same thing from within `uniq` because the output will silently be wrong if you modify a passed list:\r\n```python\r\n>>> f=list('THISTLE')\r\n>>> for i in uniq(f):\r\n...   f.remove(i)\r\n...   i\r\n...\r\n'T'\r\n'I'\r\n'L'\r\n```\r\nI think this would entail recording the size at the start and then checking the size and raising a similar RuntimeError if the size changes.\n",
+  "FAIL_TO_PASS": [
+   "test_uniq"
+  ],
+  "gold_files": [
+   "sympy/utilities/iterables.py"
+  ]
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-25332",
+  "repo": "matplotlib/matplotlib",
+  "url": "https://github.com/matplotlib/matplotlib.git",
+  "dir": "task07",
+  "base_commit": "66ba515e671638971bd11a34cff12c107a437e0b",
+  "problem_statement": "[Bug]: Unable to pickle figure with aligned labels\n### Bug summary\r\n\r\n Unable to pickle figure after calling `align_labels()`\r\n\r\n### Code for reproduction\r\n\r\n```python\r\nimport matplotlib.pyplot as plt\r\nimport pickle\r\n\r\nfig = plt.figure()\r\nax1 = fig.add_subplot(211)\r\nax2 = fig.add_subplot(212)\r\ntime=[0,1,2,3,4]\r\nspeed=[40000,4300,4500,4700,4800]\r\nacc=[10,11,12,13,14]\r\nax1.plot(time,speed)\r\nax1.set_ylabel('speed')\r\nax2.plot(time,acc)\r\nax2.set_ylabel('acc')\r\n\r\nfig.align_labels() ##pickling works after removing this line \r\n\r\npickle.dumps(fig)\r\nplt.show()\r\n```\r\n\r\n\r\n### Actual outcome\r\n```\r\nalign.py\", line 16\r\npickle.dumps(fig)\r\nTypeError: cannot pickle 'weakref.ReferenceType' object\r\n```\r\n### Expected outcome\r\n\r\nPickling successful\r\n\r\n### Additional information\r\n\r\n_No response_\r\n\r\n### Operating system\r\n\r\nWindows\r\n\r\n### Matplotlib Version\r\n\r\n3.7.0\r\n\r\n### Matplotlib Backend\r\n\r\n_No response_\r\n\r\n### Python version\r\n\r\n_No response_\r\n\r\n### Jupyter version\r\n\r\n_No response_\r\n\r\n### Installation\r\n\r\nNone\n",
+  "FAIL_TO_PASS": [
+   "lib/matplotlib/tests/test_pickle.py::test_complete[png]"
+  ],
+  "gold_files": [
+   "lib/matplotlib/cbook.py"
+  ]
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-23913",
+  "repo": "matplotlib/matplotlib",
+  "url": "https://github.com/matplotlib/matplotlib.git",
+  "dir": "task08",
+  "base_commit": "5c4595267ccd3daf78f5fd05693b7ecbcd575c1e",
+  "problem_statement": "legend draggable as keyword\n<!--To help us understand and resolve your issue, please fill out the form to the best of your ability.-->\r\n<!--You can feel free to delete the sections that do not apply.-->\r\n\r\n### Feature request\r\n\r\n**There is not keyword to make legend draggable at creation**\r\n\r\n<!--A short 1-2 sentences that succinctly describes the bug-->\r\n\r\nIs there a code reason why one can not add a \"draggable=True\" keyword to the __init__ function for Legend?  This would be more handy than having to call it after legend creation.  And, naively, it would seem simple to do.  But maybe there is a reason why it would not work?\n",
+  "FAIL_TO_PASS": [
+   "lib/matplotlib/tests/test_legend.py::test_legend_draggable[True]",
+   "lib/matplotlib/tests/test_legend.py::test_legend_draggable[False]"
+  ],
+  "gold_files": [
+   "lib/matplotlib/legend.py"
+  ]
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5103",
+  "repo": "pytest-dev/pytest",
+  "url": "https://github.com/pytest-dev/pytest.git",
+  "dir": "task09",
+  "base_commit": "10ca84ffc56c2dd2d9dc4bd71b7b898e083500cd",
+  "problem_statement": "Unroll the iterable for all/any calls to get better reports\nSometime I need to assert some predicate on all of an iterable, and for that the builtin functions `all`/`any` are great - but the failure messages aren't useful at all!\r\nFor example - the same test written in three ways:\r\n\r\n- A generator expression\r\n```sh                                                                                                                                                                                                                         \r\n    def test_all_even():\r\n        even_stevens = list(range(1,100,2))\r\n>       assert all(is_even(number) for number in even_stevens)\r\nE       assert False\r\nE        +  where False = all(<generator object test_all_even.<locals>.<genexpr> at 0x101f82ed0>)\r\n```\r\n- A list comprehension\r\n```sh\r\n    def test_all_even():\r\n        even_stevens = list(range(1,100,2))\r\n>       assert all([is_even(number) for number in even_stevens])\r\nE       assert False\r\nE        +  where False = all([False, False, False, False, False, False, ...])\r\n```\r\n- A for loop\r\n```sh\r\n    def test_all_even():\r\n        even_stevens = list(range(1,100,2))\r\n        for number in even_stevens:\r\n>           assert is_even(number)\r\nE           assert False\r\nE            +  where False = is_even(1)\r\n\r\ntest_all_any.py:7: AssertionError\r\n```\r\nThe only one that gives a meaningful report is the for loop - but it's way more wordy, and `all` asserts don't translate to a for loop nicely (I'll have to write a `break` or a helper function - yuck)\r\nI propose the assertion re-writer \"unrolls\" the iterator to the third form, and then uses the already existing reports.\r\n\r\n- [x] Include a detailed description of the bug or suggestion\r\n- [x] `pip list` of the virtual environment you are using\r\n```\r\nPackage        Version\r\n-------------- -------\r\natomicwrites   1.3.0  \r\nattrs          19.1.0 \r\nmore-itertools 7.0.0  \r\npip            19.0.3 \r\npluggy         0.9.0  \r\npy             1.8.0  \r\npytest         4.4.0  \r\nsetuptools     40.8.0 \r\nsix            1.12.0 \r\n```\r\n- [x] pytest and operating system versions\r\n`platform darwin -- Python 3.7.3, pytest-4.4.0, py-1.8.0, pluggy-0.9.0`\r\n- [x] Minimal example if possible\r\n\n",
+  "FAIL_TO_PASS": [
+   "testing/test_assertrewrite.py::TestAssertionRewrite::test_unroll_expression"
+  ],
+  "gold_files": [
+   "src/_pytest/assertion/rewrite.py"
+  ]
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-8801",
+  "repo": "sphinx-doc/sphinx",
+  "url": "https://github.com/sphinx-doc/sphinx.git",
+  "dir": "task10",
+  "base_commit": "7ca279e33aebb60168d35e6be4ed059f4a68f2c1",
+  "problem_statement": "autodoc: The annotation only member in superclass is treated as \"undocumented\"\n**Describe the bug**\r\nautodoc: The annotation only member in superclass is treated as \"undocumented\".\r\n\r\n**To Reproduce**\r\n\r\n```\r\n# example.py\r\nclass Foo:\r\n    \"\"\"docstring\"\"\"\r\n    attr1: int  #: docstring\r\n\r\n\r\nclass Bar(Foo):\r\n    \"\"\"docstring\"\"\"\r\n    attr2: str  #: docstring\r\n```\r\n```\r\n# index.rst\r\n.. autoclass:: example.Bar\r\n   :members:\r\n   :inherited-members:\r\n```\r\n\r\n`Bar.attr1` is not documented. It will be shown if I give `:undoc-members:` option to the autoclass directive call. It seems the attribute is treated as undocumented.\r\n\r\n**Expected behavior**\r\nIt should be shown.\r\n\r\n**Your project**\r\nNo\r\n\r\n**Screenshots**\r\nNo\r\n\r\n**Environment info**\r\n- OS: Mac\r\n- Python version: 3.9.1\r\n- Sphinx version: HEAD of 3.x\r\n- Sphinx extensions: sphinx.ext.autodoc\r\n- Extra tools: No\r\n\r\n**Additional context**\r\nNo\r\n\n",
+  "FAIL_TO_PASS": [
+   "tests/test_ext_autodoc_autoclass.py::test_uninitialized_attributes"
+  ],
+  "gold_files": [
+   "sphinx/ext/autodoc/importer.py"
+  ]
+ },
+ {
+  "instance_id": "pallets__flask-4045",
+  "repo": "pallets/flask",
+  "url": "https://github.com/pallets/flask.git",
+  "dir": "task11",
+  "base_commit": "d8c37f43724cd9fb0870f77877b7c4c7e38a19e0",
+  "problem_statement": "Raise error when blueprint name contains a dot\nThis is required since every dot is now significant since blueprints can be nested. An error was already added for endpoint names in 1.0, but should have been added for this as well.\n",
+  "FAIL_TO_PASS": [
+   "tests/test_blueprints.py::test_dotted_name_not_allowed",
+   "tests/test_blueprints.py::test_route_decorator_custom_endpoint_with_dots"
+  ],
+  "gold_files": [
+   "src/flask/blueprints.py"
+  ]
+ },
+ {
+  "instance_id": "pydata__xarray-4493",
+  "repo": "pydata/xarray",
+  "url": "https://github.com/pydata/xarray.git",
+  "dir": "task12",
+  "base_commit": "a5f53e203c52a7605d5db799864046471115d04f",
+  "problem_statement": "DataSet.update causes chunked dask DataArray to evalute its values eagerly \n**What happened**:\r\nUsed `DataSet.update` to update a chunked dask DataArray, but the DataArray is no longer chunked after the update.\r\n\r\n**What you expected to happen**:\r\nThe chunked DataArray should still be chunked after the update\r\n\r\n**Minimal Complete Verifiable Example**:\r\n\r\n```python\r\nfoo = xr.DataArray(np.random.randn(3, 3), dims=(\"x\", \"y\")).chunk()  # foo is chunked\r\nds = xr.Dataset({\"foo\": foo, \"bar\": (\"x\", [1, 2, 3])})  # foo is still chunked here\r\nds  # you can verify that foo is chunked\r\n```\r\n```python\r\nupdate_dict = {\"foo\": ((\"x\", \"y\"), ds.foo[1:, :]), \"bar\": (\"x\", ds.bar[1:])}\r\nupdate_dict[\"foo\"][1]  # foo is still chunked\r\n```\r\n```python\r\nds.update(update_dict)\r\nds  # now foo is no longer chunked\r\n```\r\n\r\n**Environment**:\r\n\r\n<details><summary>Output of <tt>xr.show_versions()</tt></summary>\r\n\r\n```\r\ncommit: None\r\npython: 3.8.3 (default, Jul  2 2020, 11:26:31) \r\n[Clang 10.0.0 ]\r\npython-bits: 64\r\nOS: Darwin\r\nOS-release: 19.6.0\r\nmachine: x86_64\r\nprocessor: i386\r\nbyteorder: little\r\nLC_ALL: None\r\nLANG: en_US.UTF-8\r\nLOCALE: en_US.UTF-8\r\nlibhdf5: 1.10.6\r\nlibnetcdf: None\r\n\r\nxarray: 0.16.0\r\npandas: 1.0.5\r\nnumpy: 1.18.5\r\nscipy: 1.5.0\r\nnetCDF4: None\r\npydap: None\r\nh5netcdf: None\r\nh5py: 2.10.0\r\nNio: None\r\nzarr: None\r\ncftime: None\r\nnc_time_axis: None\r\nPseudoNetCDF: None\r\nrasterio: None\r\ncfgrib: None\r\niris: None\r\nbottleneck: None\r\ndask: 2.20.0\r\ndistributed: 2.20.0\r\nmatplotlib: 3.2.2\r\ncartopy: None\r\nseaborn: None\r\nnumbagg: None\r\npint: None\r\nsetuptools: 49.2.0.post20200714\r\npip: 20.1.1\r\nconda: None\r\npytest: 5.4.3\r\nIPython: 7.16.1\r\nsphinx: None\r\n```\r\n\r\n</details>\nDataset constructor with DataArray triggers computation\nIs it intentional that creating a Dataset with a DataArray and dimension names for a single variable causes computation of that variable?  In other words, why does ```xr.Dataset(dict(a=('d0', xr.DataArray(da.random.random(10)))))``` cause the dask array to compute?\r\n\r\nA longer example:\r\n\r\n```python\r\nimport dask.array as da\r\nimport xarray as xr\r\nx = da.random.randint(1, 10, size=(100, 25))\r\nds = xr.Dataset(dict(a=xr.DataArray(x, dims=('x', 'y'))))\r\ntype(ds.a.data)\r\ndask.array.core.Array\r\n\r\n# Recreate the dataset with the same array, but also redefine the dimensions\r\nds2 = xr.Dataset(dict(a=(('x', 'y'), ds.a))\r\ntype(ds2.a.data)\r\nnumpy.ndarray\r\n```\r\n\r\n\n",
+  "FAIL_TO_PASS": [
+   "xarray/tests/test_variable.py::TestVariable::test_as_variable"
+  ],
+  "gold_files": [
+   "xarray/core/variable.py"
+  ]
+ }
+]

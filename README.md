@@ -6,7 +6,7 @@ Capped-output wrapper around any command — designed for coding agents, not hum
 
 Useful for bug fixing and code search, but intentionally limits information to save tokens and avoid context degradation during long agent runs. A human developer doesn't read an entire file before fixing a bug, coding agents shouldn't either.
 
-`trim` caps output at 1000 characters per call, forcing agents to search precisely instead of dumping entire files. This saves tokens, reduces noise, and keeps the context window focused over long sessions.
+`trim` caps output at 1000 characters per call, forcing agents to search precisely instead of dumping entire files. This saves tokens, reduces noise, and keeps the context window focused over long sessions. Before capping, `trim` strips ANSI color codes and collapses runs of blank lines, so the 1000-character budget shows real content, not invisible bytes.
 
 If you need unrestricted browsing, run commands directly. This tool is built for coding agents.
 
@@ -20,8 +20,7 @@ trim outline <file>         extract function/class signatures (ast-grep)
 trim diff [<file>]          git diff (read-only)
 trim blame <file>           git blame (read-only)
 trim log [<args>]           git log (read-only)
-trim read|cat|print <file>  read file with output cap
-trim sed <file> <n> [<m>]   print file from line n to m
+trim par "cmd1" "cmd2" ...   batch commands, each output capped separately
 trim <command> [args]       run ANY command, output capped
 ```
 

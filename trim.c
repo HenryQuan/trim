@@ -5,6 +5,7 @@
 
 #ifdef _WIN32
   #include <io.h>
+  #include <fcntl.h>
   #define popen _popen
   #define pclose _pclose
 #else
@@ -39,10 +40,11 @@ static const char *HELP =
     "  trim outline <file>            extract function/class signatures (ast-grep)\n"
     "  trim diff [<file>]             git diff (read-only)\n"
     "  trim blame <file>              git blame (read-only)\n"
-    "  trim log [<args>]              git log (read-only)\n";
+    "  trim log [<args>]              git log (read-only)\n"
+    "  trim par \"cmd1\" \"cmd2\" ...    batch commands, each output capped\n";
 
 static const char *HINT =
-    "\n--- TRUNCATED (%zu/%zu chars) ---\nTip: refine further -- narrow the query or use a more specific command.\n";
+    "\n[TRUNCATED:%zu/%zuc]\n";
 
 static int is_read(const char *s) {
     return !strcmp(s, "read") || !strcmp(s, "cat") || !strcmp(s, "print");
@@ -57,6 +59,93 @@ static void cap(const char *s, int truncated, size_t total_chars) {
     } else {
         fputs(s, stdout);
     }
+}
+
+/* strip ANSI escape codes (ESC[<params><letter>) in place; returns new length */
+static size_t strip_ansi(char *s, size_t n) {
+    size_t w = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (s[i] == 0x1b && i + 1 < n && s[i + 1] == '[') {
+            size_t j = i + 2;
+            while (j < n && ((s[j] >= '0' && s[j] <= '9') || s[j] == ';')) j++;
+            if (j < n && ((s[j] >= 'A' && s[j] <= 'Z') || (s[j] >= 'a' && s[j] <= 'z'))) {
+                i = j;
+                continue;
+            }
+        }
+        s[w++] = s[i];
+    }
+    return w;
+}
+
+/* collapse runs of 3+ newlines into 2 in place; returns new length */
+static size_t collapse_blanks(char *s, size_t n) {
+    size_t w = 0, nl = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (s[i] == '\n') {
+            nl++;
+            if (nl > 2) continue;
+        } else {
+            nl = 0;
+        }
+        s[w++] = s[i];
+    }
+    return w;
+}
+
+/* normalize \r\n -> \n and lone \r -> \n in place; returns new length */
+static size_t normalize_newlines(char *s, size_t n) {
+    size_t w = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (s[i] == '\r') {
+            if (i + 1 < n && s[i + 1] == '\n') continue;
+            s[w++] = '\n';
+        } else {
+            s[w++] = s[i];
+        }
+    }
+    return w;
+}
+
+/* strip leading spaces/tabs in place (NUL-terminated); returns new length */
+static size_t lstrip(char *s) {
+    size_t i = 0;
+    while (s[i] == ' ' || s[i] == '\t') i++;
+    if (i) memmove(s, s + i, strlen(s) - i + 1);
+    return strlen(s);
+}
+
+/* strip leading spaces/tabs from every line in a buffer; returns new length */
+static size_t lstrip_lines(char *s, size_t n) {
+    size_t w = 0, i = 0;
+    while (i < n) {
+        size_t j = i;
+        while (j < n && s[j] != '\n') j++;
+        size_t k = i;
+        while (k < j && (s[k] == ' ' || s[k] == '\t')) k++;
+        size_t len = j - k;
+        memmove(s + w, s + k, len);
+        w += len;
+        if (j < n) s[w++] = '\n';
+        i = j + 1;
+    }
+    return w;
+}
+
+/* collapse runs of 2+ spaces/tabs to one space in place; returns new length */
+static size_t collapse_spaces(char *s, size_t n) {
+    size_t w = 0;
+    for (size_t i = 0; i < n; i++) {
+        if ((s[i] == ' ' || s[i] == '\t') && w > 0 && (s[w - 1] == ' ' || s[w - 1] == '\t'))
+            continue;
+        s[w++] = s[i];
+    }
+    return w;
+}
+
+static int is_blank_line(const char *s) {
+    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') s++;
+    return *s == '\0';
 }
 
 #ifdef _WIN32
@@ -94,6 +183,38 @@ static void append_escaped(char *buf, int *pos, int bufsize, const char *arg) {
 }
 #endif
 
+static int run_cmd_str(const char *cmd) {
+    char buf[4220];
+    size_t blen = strlen(cmd);
+    if (blen + 6 >= sizeof(buf)) blen = sizeof(buf) - 7;
+    memcpy(buf, cmd, blen);
+    memcpy(buf + blen, " 2>&1", 6);
+
+    FILE *p = popen(buf, "r");
+    if (!p) { fprintf(stderr, "error: failed to run command\n"); return 1; }
+
+    char out[65536];
+    size_t n = 0;
+    int ch;
+    while ((ch = fgetc(p)) != EOF && n < sizeof(out) - 1)
+        out[n++] = (char)ch;
+    out[n] = '\0';
+    size_t total = n;
+    while ((ch = fgetc(p)) != EOF) total++;
+    n = strip_ansi(out, n);
+    n = normalize_newlines(out, n);
+    n = collapse_blanks(out, n);
+    n = lstrip_lines(out, n);
+    out[n] = '\0';
+    cap(out, n > MAX_CHARS, total);
+    int rc = pclose(p);
+#ifndef _WIN32
+    if (rc == -1) return 1;
+    if (rc && WIFEXITED(rc)) rc = WEXITSTATUS(rc);
+#endif
+    return rc;
+}
+
 static void run_cmd(char **args, int argc) {
     char buf[4096];
     int pos = 0;
@@ -112,91 +233,113 @@ static void run_cmd(char **args, int argc) {
         }
     }
 
-    size_t blen = strlen(buf);
-    if (blen + 6 < sizeof(buf))
-        memcpy(buf + blen, " 2>&1", 6);
-    else
-        buf[blen] = '\0';
-
-    FILE *p = popen(buf, "r");
-    if (!p) { fprintf(stderr, "error: failed to run command\n"); exit(1); }
-
-    char out[65536];
-    size_t n = 0;
-    int ch;
-    while ((ch = fgetc(p)) != EOF && n < sizeof(out) - 1)
-        out[n++] = (char)ch;
-    out[n] = '\0';
-    size_t total = n;
-    while ((ch = fgetc(p)) != EOF) total++;
-    cap(out, total > MAX_CHARS, total);
-    int rc = pclose(p);
-#ifndef _WIN32
-    if (rc == -1) exit(1);
-    if (rc && WIFEXITED(rc)) rc = WEXITSTATUS(rc);
-#endif
+    int rc = run_cmd_str(buf);
     if (rc > 1) exit(rc);
+}
+
+/* trim par "cmd1" "cmd2" ... — run each command, each output capped separately */
+static void cmd_par(int argc, char **argv) {
+    int shown = 0;
+    for (int i = 0; i < argc; i++) {
+        if (!argv[i] || !argv[i][0]) continue;
+        if (shown++) printf("\n");
+        printf("[%d] %s\n", i + 1, argv[i]);
+        run_cmd_str(argv[i]);
+    }
 }
 
 static void read_file(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) { fprintf(stderr, "error: cannot open %s\n", path); exit(1); }
+    size_t total = 0;
+    int c;
+    while ((c = fgetc(f)) != EOF) total++;
+    rewind(f);
+
     char line[4096];
-    size_t printed = 0, total = 0;
-    int truncated = 0, lineno = 0;
+    size_t printed = 0;
+    int lineno = 0, blanks = 0, emitted = 0;
     while (fgets(line, sizeof(line), f)) {
         lineno++;
         size_t len = strlen(line);
-        total += len;
-        if (printed + len > MAX_CHARS) {
-            if (printed < MAX_CHARS) {
-                size_t rem = MAX_CHARS - printed;
-                printf("%d: ", lineno);
-                fwrite(line, 1, rem, stdout);
-            }
-            truncated = 1;
-            while (fgets(line, sizeof(line), f))
-                total += strlen(line);
-            break;
+        len = strip_ansi(line, len);
+        len = normalize_newlines(line, len);
+        line[len] = '\0';
+        len = lstrip(line);
+        len = collapse_spaces(line, len);
+        if (is_blank_line(line)) {
+            if (blanks >= 1) continue;
+            blanks++;
+        } else {
+            blanks = 0;
         }
-        printf("%d: %s", lineno, line);
-        printed += len;
+        if (len && line[len - 1] == '\n') line[--len] = '\0';
+        while (len && (line[len - 1] == ' ' || line[len - 1] == '\t' || line[len - 1] == '\r'))
+            line[--len] = '\0';
+
+        char pre[24];
+        int plen = snprintf(pre, sizeof(pre), "|%d:", lineno);
+        if (printed + (size_t)plen + len > MAX_CHARS) break;
+        if (!emitted) printf("[T:%d/%zu]FILE:%s@%d", (int)MAX_CHARS, total, path, lineno);
+        fputs(pre, stdout);
+        fputs(line, stdout);
+        printed += (size_t)plen + len;
+        emitted++;
     }
     fclose(f);
-    if (truncated) printf(HINT, MAX_CHARS, total);
+    if (!emitted) printf("[T:%d/%zu]FILE:%s@0", (int)MAX_CHARS, total, path);
+    printf("\n");
 }
 
 static void read_lines(const char *path, int start, int end) {
     FILE *f = fopen(path, "r");
     if (!f) { fprintf(stderr, "error: cannot open %s\n", path); exit(1); }
+    char tmp[4096];
+    size_t total = 0;
+    int ln = 0;
+    while (fgets(tmp, sizeof(tmp), f)) {
+        ln++;
+        if (ln < start) continue;
+        if (end > 0 && ln > end) break;
+        total += strlen(tmp);
+    }
+    rewind(f);
+
     char line[4096];
-    size_t printed = 0, total = 0;
-    int truncated = 0, lineno = 0;
+    size_t printed = 0;
+    int lineno = 0, blanks = 0, emitted = 0;
     while (fgets(line, sizeof(line), f)) {
         lineno++;
         if (lineno < start) continue;
         if (end > 0 && lineno > end) break;
         size_t len = strlen(line);
-        total += len;
-        if (printed + len > MAX_CHARS) {
-            if (printed < MAX_CHARS) {
-                size_t rem = MAX_CHARS - printed;
-                printf("%d: ", lineno);
-                fwrite(line, 1, rem, stdout);
-            }
-            truncated = 1;
-            while (fgets(line, sizeof(line), f)) {
-                lineno++;
-                if (end > 0 && lineno > end) break;
-                total += strlen(line);
-            }
-            break;
+        len = strip_ansi(line, len);
+        len = normalize_newlines(line, len);
+        line[len] = '\0';
+        len = lstrip(line);
+        len = collapse_spaces(line, len);
+        if (is_blank_line(line)) {
+            if (blanks >= 1) continue;
+            blanks++;
+        } else {
+            blanks = 0;
         }
-        printf("%d: %s", lineno, line);
-        printed += len;
+        if (len && line[len - 1] == '\n') line[--len] = '\0';
+        while (len && (line[len - 1] == ' ' || line[len - 1] == '\t' || line[len - 1] == '\r'))
+            line[--len] = '\0';
+
+        char pre[24];
+        int plen = snprintf(pre, sizeof(pre), "|%d:", lineno);
+        if (printed + (size_t)plen + len > MAX_CHARS) break;
+        if (!emitted) printf("[T:%d/%zu]FILE:%s@%d", (int)MAX_CHARS, total, path, lineno);
+        fputs(pre, stdout);
+        fputs(line, stdout);
+        printed += (size_t)plen + len;
+        emitted++;
     }
     fclose(f);
-    if (truncated) printf(HINT, MAX_CHARS, total);
+    if (!emitted) printf("[T:%d/%zu]FILE:%s@0", (int)MAX_CHARS, total, path);
+    printf("\n");
 }
 
 static void cmd_outline(int argc, char **argv) {
@@ -233,6 +376,9 @@ static void cmd_log(int argc, char **argv) {
 
 int main(int argc, char **argv) {
     init_max_chars();
+#ifdef _WIN32
+    _setmode(_fileno(stdout), _O_BINARY);
+#endif
     if (argc < 2 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
         fputs(HELP, stdout);
         return 0;
@@ -274,6 +420,12 @@ int main(int argc, char **argv) {
 
     if (!strcmp(cmd, "log")) {
         cmd_log(argc, argv);
+        return 0;
+    }
+
+    if (!strcmp(cmd, "par")) {
+        if (argc < 3) { fprintf(stderr, "error: usage: trim par \"cmd1\" \"cmd2\" ...\n"); return 1; }
+        cmd_par(argc - 2, argv + 2);
         return 0;
     }
 

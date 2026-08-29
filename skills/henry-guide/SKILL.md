@@ -79,6 +79,18 @@ Refine search; never dump whole files.
 
 Any command works: `trim <command> [args]` runs it with output capped. Never use bare `cat` or `sed`.
 
+### Batch commands (FORCED — saves steps):
+
+**⚠️ RULE: Each bash call MUST run 3-5 commands at once via `trim par` — one command per bash call is a violation.** Each step is an API call and re-sends context; only batching cuts the step tax.
+
+Before every decision, plan the whole batch of operations you need, then run them in ONE call (each output capped separately):
+
+```text
+trim par "trim rg pattern" "trim sed <file> <n> <m>" "trim outline <file2>" "trim git status"
+```
+
+Self-check before issuing ANY bash call: "Do I have 3+ pending read/search/status operations?" If yes, they must go in one `trim par`. A single `trim` call is only allowed when it is genuinely the only operation needed for the next action.
+
 ## 3. Simplify
 
 Simple > smart. Build boring code maintainable for 10+ years.

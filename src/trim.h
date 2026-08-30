@@ -1,23 +1,23 @@
 #ifndef TRIM_H
 #define TRIM_H
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 
 #ifdef _WIN32
-  #include <io.h>
-  #include <fcntl.h>
-  #define popen _popen
-  #define pclose _pclose
+#include <fcntl.h>
+#include <io.h>
+#define popen _popen
+#define pclose _pclose
 #else
-  #include <unistd.h>
-  #include <sys/wait.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #endif
 
 #define HINT_PAR "prefer trim par \"a\" \"b\" ..."
-#define HINT_RG  "capped — try trim outline <file>"
+#define HINT_RG "capped — try trim outline <file>"
 #define HINT_OUT "capped — try trim rg <pat> <file>"
 
 extern size_t MAX_CHARS;

@@ -14,6 +14,10 @@ trm: $(SRCS) src/trim.h
 trm.exe: $(SRCS) src/trim.h
 	$(CC) $(CFLAGS) -o $@ $(SRCS)
 
-.PHONY: clean
+.PHONY: clean format
 clean:
 	rm -f trim trim.exe trm trm.exe
+
+# format C sources/headers with clang-format (uses .clang-format)
+format:
+	clang-format -i --style=file $(SRCS) src/trim.h

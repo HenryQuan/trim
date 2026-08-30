@@ -26,6 +26,10 @@ WORK = BENCH / "work"
 OUT = BENCH / "out"
 PROMPTS = BENCH / "prompts"
 TASKS = json.loads((BENCH / "tasks.json").read_text(encoding="utf-8"))
+# Fast testing: BENCH_TASKS=N runs only the first N tasks.
+_num = os.environ.get("BENCH_TASKS")
+if _num:
+    TASKS = TASKS[: int(_num)]
 MODEL = os.environ.get("OPENCODE_MODEL", "deepseek/deepseek-v4-flash")
 OFFLINE_CONFIG = BENCH / "opencode.offline.json"
 
@@ -46,6 +50,18 @@ VANILLA_PROMPT = (
     "each codebase; do not stop until all 12 are fixed. Use whatever tools or approach you like. "
     "Note: you have NO network access and no runtime interpreters — do not attempt curl, wget, "
     "webfetch, python, node, pip, uv, or git fetch/clone/pull. Work only from the local repo files."
+)
+TRIMONLY_PROMPT = (
+    "There are 12 bug reports, one per subdirectory task01..task12 (see tasks.md). Fix the bug in "
+    "each codebase; do not stop until all 12 are fixed.\n\n"
+    "Rules you MUST follow:\n"
+    "1. Use `trim` for ALL file inspection. trim read <file> reads smartly (small file -> whole content; "
+    "large file -> outline + first 10 + last 10 lines + hint). trim lines <file> <start> <end> reads exact "
+    "lines. trim rg searches, trim outline lists signatures, trim diff reviews changes.\n"
+    "2. You have NO network access and no runtime interpreters: never use curl, wget, webfetch, python, "
+    "node, pip, uv, or git fetch/clone/pull. Work only from the local repo files.\n"
+    "3. Review your diff (trim diff) instead of running tests — they cannot run here.\n"
+    "4. Fix all 12; do not stop early."
 )
 
 
@@ -72,6 +88,7 @@ def reset_all() -> None:
 ARMS = {
     "trim":    {"config": "opencode.offline.json", "prompt": TRIM_PROMPT,    "path": ROOT},
     "vanilla": {"config": "opencode.offline.json", "prompt": VANILLA_PROMPT},
+    "trimonly": {"config": "opencode.trim.json",   "prompt": TRIMONLY_PROMPT, "path": ROOT, "no_skill": True},
     "trimcmd": {"config": "opencode.trim.json",    "prompt": VANILLA_PROMPT, "path": ROOT, "no_skill": True,
                 "trim_max": os.environ.get("TRIM_MAX_CHARS", "4321")},
     "rtk":     {"config": "opencode.rtk.json",     "prompt": VANILLA_PROMPT, "no_skill": True},
@@ -217,7 +234,7 @@ def report(saved: dict) -> None:
         acc = s.get("accuracy", {})
         n = sum(1 for v in acc.values() if v.get("gold_touched"))
         print(f"{arm:<7} {s['elapsed_s']:>8.0f} {s['steps']:>6} {s['input']:>10} {s['output']:>10} "
-              f"{s['cache_read']:>10} {s['total']:>10} {s['cost']:>8.4f} {n}/12 "
+              f"{s['cache_read']:>10} {s['total']:>10} {s['cost']:>8.4f} {n}/{len(TASKS)} "
               f"{s.get('blocked', '?'):>8} {s.get('external', '?'):>9}")
     print("total = input + output (fresh tokens); cache.read billed separately; "
           "accuracy = gold file touched; blocked = attempted network/runtime calls "
@@ -235,12 +252,17 @@ def load_saved() -> dict:
 
 
 def main() -> None:
+    global TASKS
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", choices=ALL_ARMS, help="run a single arm")
+    ap.add_argument("--tasks", type=int, default=0,
+                    help="run only the first N tasks (faster testing)")
     ap.add_argument("--report", action="store_true", help="print comparison from saved results")
     ap.add_argument("--rerun", action="store_true",
                     help="discard saved results and rerun all pending arms")
     args = ap.parse_args()
+    if args.tasks > 0:
+        TASKS = TASKS[: args.tasks]
 
     if args.report:
         saved = load_saved()

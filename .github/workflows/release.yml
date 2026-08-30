@@ -29,7 +29,7 @@ jobs:
             macOS)   out="trim-macos"   ;;
             Windows) out="trim-windows.exe" ;;
           esac
-          gcc -O2 -s -o "$out" trim.c
+          gcc -O2 -s -o "$out" src/main.c src/util.c src/exec.c src/compact.c src/read.c
         shell: bash
 
       - uses: actions/upload-artifact@v4

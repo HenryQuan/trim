@@ -122,10 +122,21 @@ def parse_stream(json_path: Path) -> dict:
     NET_TOOLS = {"webfetch", "websearch"}
     NET_CMDS = ("curl", "wget", "python", "python3", "py", "node", "npm", "npx", "pip", "pip3", "uv", "uvx")
     NET_GIT = ("fetch", "pull", "clone", "ls-remote", "push")
+    import re
+    WORK_STR = str(WORK).lower()
+
+    def reads_outside_work(cmd: str) -> bool:
+        # Windows drive-letter absolute paths (e.g. C:\... or C:/...) not under WORK
+        for m in re.finditer(r"[A-Za-z]:[\\/][^ \t\"';|&()]+", cmd):
+            p = m.group(0).rstrip("\\/")
+            if not p.lower().startswith(WORK_STR):
+                return True
+        return False
 
     inp = out = cache = cost = steps = 0
     tools: dict[str, int] = {}
     blocked = 0
+    external = 0
     session = ""
     for line in json_path.read_text(encoding="utf-8").splitlines():
         try:
@@ -158,9 +169,11 @@ def parse_stream(json_path: Path) -> dict:
                         blocked += 1
                 elif first == "git" and len(head) > 1 and head[1] in NET_GIT:
                     blocked += 1
+                if reads_outside_work(cmd):
+                    external += 1
     return {"session": session, "steps": steps, "input": inp, "output": out,
             "cache_read": cache, "total": inp + out, "cost": round(cost, 6),
-            "tools": tools, "blocked": blocked}
+            "tools": tools, "blocked": blocked, "external": external}
 
 
 def accuracy() -> dict:
@@ -197,17 +210,19 @@ def accuracy() -> dict:
 
 def report(saved: dict) -> None:
     header = (f"{'arm':<7} {'time(s)':>8} {'steps':>6} {'input':>10} {'output':>10} "
-              f"{'cache':>10} {'total':>10} {'cost$':>8} {'gold_touched':>13} {'blocked':>8}")
+              f"{'cache':>10} {'total':>10} {'cost$':>8} {'gold_touched':>13} {'blocked':>8} {'external':>9}")
     print(header)
     print("-" * len(header))
     for arm, s in saved.items():
         acc = s.get("accuracy", {})
         n = sum(1 for v in acc.values() if v.get("gold_touched"))
         print(f"{arm:<7} {s['elapsed_s']:>8.0f} {s['steps']:>6} {s['input']:>10} {s['output']:>10} "
-              f"{s['cache_read']:>10} {s['total']:>10} {s['cost']:>8.4f} {n}/12 {s.get('blocked', '?'):>8}")
+              f"{s['cache_read']:>10} {s['total']:>10} {s['cost']:>8.4f} {n}/12 "
+              f"{s.get('blocked', '?'):>8} {s.get('external', '?'):>9}")
     print("total = input + output (fresh tokens); cache.read billed separately; "
           "accuracy = gold file touched; blocked = attempted network/runtime calls "
-          "(webfetch/curl/wget/python/node/pip/uv/git fetch)")
+          "(webfetch/curl/wget/python/node/pip/uv/git fetch); "
+          "external = bash commands touching absolute paths outside benchmark/work")
 
 
 def load_saved() -> dict:

@@ -6,7 +6,9 @@ Capped-output wrapper around any command — designed for coding agents, not hum
 
 Useful for bug fixing and code search, but intentionally limits information to save tokens and avoid context degradation during long agent runs. A human developer doesn't read an entire file before fixing a bug, coding agents shouldn't either.
 
-`trim` caps output at 1000 characters per call, forcing agents to search precisely instead of dumping entire files. This saves tokens, reduces noise, and keeps the context window focused over long sessions. Before capping, `trim` strips ANSI color codes and collapses runs of blank lines, so the 1000-character budget shows real content, not invisible bytes.
+`trim` caps output per call, forcing agents to search precisely instead of dumping entire files. This saves tokens, reduces noise, and keeps the context window focused over long sessions. Before capping, `trim` strips ANSI color codes and collapses runs of blank lines, so the budget shows real content, not invisible bytes.
+
+**The real metric is total cost, and it is dominated by steps, not by per-step tokens.** Each step is an API round-trip that re-reads the whole growing context from cache. Cutting the cost per step while increasing the total number of steps still raises total cost — the added round-trips and cache reads can outweigh the fresh-token saving. So the way to win is to **do more per step**: batch independent operations into one call (`trim par`), read a whole small file in one step, and let `trim read` collapse outline+preview into a single call on large files. Fewer, bigger steps beat many, tiny ones.
 
 If you need unrestricted browsing, run commands directly. This tool is built for coding agents.
 
@@ -16,18 +18,21 @@ If you need unrestricted browsing, run commands directly. This tool is built for
 trim rg <args>              run ripgrep
 trim sg <args>              run ast-grep
 trim fd <args>              run fd
+trim read|cat|print <file>  smart read (small → whole file; large → outline + preview + hint)
+trim lines <file> <s> [<e>] exact lines s..e ($ = EOF)
 trim outline <file>         extract function/class signatures (ast-grep)
 trim diff [<file>]          git diff (read-only)
 trim blame <file>           git blame (read-only)
 trim log [<args>]           git log (read-only)
-trim par "cmd1" "cmd2" ...   batch commands, each output capped separately
+trim par "cmd1" "cmd2" ...   batch commands into one step — the primary cost saver
 trim <command> [args]       run ANY command, output capped
 ```
 
 `trim` is a generic wrapper: any command not listed above is run as-is with capped output. Shorthands are convenience mappings — `trim diff` becomes `git diff`, `trim sg` becomes `ast-grep`, and so on. `trm` is a shorter alias for `trim`.
 
 ```
-TRIM_MAX_CHARS=500 trim rg pattern
+TRIM_MAX_CHARS=500 trim rg pattern    # per-command output cap
+TRIM_MAX_LINES=1024 trim lines file 1 40   # range-read line cap (default 512)
 ```
 
 ## Install
@@ -107,13 +112,13 @@ $ trim outline task05/sympy/integrals/rubi/rubi_tests/tests/test_trinomials.py
    32: def test_1():   1789: def test_2():   2104: def test_3(): ...
 → ~200 chars — reveals it's 5 test stubs, no need to read the file
 
-$ trim sed task05/sympy/utilities/iterables.py 2077 2090
+$ trim lines task05/sympy/utilities/iterables.py 2077 2090
 → the exact lines needed
 ```
 
 A few hundred tokens vs ~378k for one naive read — roughly **1000x** on that file alone. The win multiplies because every wasted read pollutes all later steps. In a 30-repo knowledge base the danger is whole-file reads during exploration; search output (paths + line numbers) is naturally tiny, so trim's cap keeps the whole session lean.
 
-The key is that trim is **defensive**: the agent has no idea `test_trinomials.py` is 1.5 MB until it reads it. Even a careful model that usually searches precisely can open a huge file by accident (and context-capped agents like Codex/Claude then hit the cutoff, or burn 30k+ tokens on the file alone). trim removes that failure mode — *every* read is capped at 1000 chars, so even an accidental read of a giant file costs a rounding error. The bigger and more numerous the files, the more often this accident happens, so **the larger the repo, the more trim shines**. It's insurance against the read you didn't know was expensive.
+The key is that trim is **defensive**: the agent has no idea `test_trinomials.py` is 1.5 MB until it reads it. Even a careful model that usually searches precisely can open a huge file by accident (and context-capped agents like Codex/Claude then hit the cutoff, or burn 30k+ tokens on the file alone). trim removes that failure mode — *every* read is capped (and large files collapse to outline+preview via `trim read`), so even an accidental read of a giant file costs a rounding error. The bigger and more numerous the files, the more often this accident happens, so **the larger the repo, the more trim shines**. It's insurance against the read you didn't know was expensive.
 
 Caveat: this only works if the model actually uses `trim` — the PI extensions (`enforce-trm.ts`, `bash-cap.ts`) guarantee it at the tool level; prompt-only discipline can be bypassed (bare `read`, `cat`, `curl`).
 

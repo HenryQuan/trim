@@ -15,7 +15,8 @@
 
 int _CRT_glob = 0;
 
-static size_t MAX_CHARS = 1000;
+static size_t MAX_CHARS = 2222;
+static size_t MAX_LINES = 512;
 
 static void init_max_chars(void) {
     char *env = getenv("TRIM_MAX_CHARS");
@@ -23,39 +24,60 @@ static void init_max_chars(void) {
         unsigned long v = strtoul(env, NULL, 10);
         if (v > 0) MAX_CHARS = v < 65536 ? (size_t)v : 65536;
     }
+    char *envl = getenv("TRIM_MAX_LINES");
+    if (envl) {
+        unsigned long v = strtoul(envl, NULL, 10);
+        if (v > 0) MAX_LINES = v < 100000 ? (size_t)v : 100000;
+    }
 }
 
 static const char *HELP =
     "trim: capped-output wrapper around any command\n"
     "\n"
     "Always use trim (alias trm) instead of raw commands -- output is capped to save tokens.\n"
+    "Follow understand -> ask -> inspect -> simplify -> change -> verify -> report\n"
     "\n"
     "Usage:\n"
     "  trim <command> [args]          run any command, output capped\n"
     "  trim rg <args>                 run ripgrep\n"
     "  trim sg <args>                 run ast-grep\n"
     "  trim fd <args>                 run fd\n"
-    "  trim read|cat|print <file>     read file with output cap\n"
-    "  trim sed <file> <n> [<m>]      print file from line n to m\n"
+    "  trim lines <file> <start> [<end>]  print lines start..end (l/sed aliases; $ = EOF)\n"
+    "  trim read|cat|print <file>     read whole file with output cap (prefer trim lines)\n"
     "  trim outline <file>            extract function/class signatures (ast-grep)\n"
     "  trim diff [<file>]             git diff (read-only)\n"
     "  trim blame <file>              git blame (read-only)\n"
     "  trim log [<args>]              git log (read-only)\n"
-    "  trim par \"cmd1\" \"cmd2\" ...    batch commands, each output capped\n";
+    "  trim par \"cmd1\" \"cmd2\" ...    batch commands, each output capped\n"
+    "  trim lines honors its range up to MAX_LINES (default 512, env TRIM_MAX_LINES);\n"
+    "  prefer trim lines over trim read/cat/print to avoid whole-file reads.\n";
 
 static const char *HINT =
-    "\n[TRUNCATED:%zu/%zuc]\n";
+    "\n[TRUNCATED:%zu/%zuc] %s\n";
+#define HINT_PAR "prefer trim par \"a\" \"b\" ..."
+#define HINT_RG  "capped — try trim outline <file>"
+#define HINT_OUT "capped — try trim rg <pat> <file>"
+
+static const char *pick_hint(const char *cmd) {
+    if (!strncmp(cmd, "rg ", 3)) return HINT_RG;
+    if (!strncmp(cmd, "ast-grep", 8)) return HINT_OUT;
+    return HINT_PAR;
+}
 
 static int is_read(const char *s) {
     return !strcmp(s, "read") || !strcmp(s, "cat") || !strcmp(s, "print");
 }
 
-static void cap(const char *s, int truncated, size_t total_chars) {
+static int is_lines(const char *s) {
+    return !strcmp(s, "lines") || !strcmp(s, "l") || !strcmp(s, "sed");
+}
+
+static void cap(const char *s, int truncated, size_t total_chars, const char *hint) {
     size_t len = strlen(s);
     if (truncated || len > MAX_CHARS) {
         size_t n = len < MAX_CHARS ? len : MAX_CHARS;
         fwrite(s, 1, n, stdout);
-        printf(HINT, MAX_CHARS, total_chars);
+        printf(HINT, MAX_CHARS, total_chars, hint ? hint : HINT_PAR);
     } else {
         fputs(s, stdout);
     }
@@ -206,7 +228,7 @@ static int run_cmd_str(const char *cmd) {
     n = collapse_blanks(out, n);
     n = lstrip_lines(out, n);
     out[n] = '\0';
-    cap(out, n > MAX_CHARS, total);
+    cap(out, n > MAX_CHARS, total, pick_hint(cmd));
     int rc = pclose(p);
 #ifndef _WIN32
     if (rc == -1) return 1;
@@ -248,47 +270,27 @@ static void cmd_par(int argc, char **argv) {
     }
 }
 
-static void read_file(const char *path) {
+static void read_lines(const char *path, int start, int end);
+
+/* smart read: small file -> whole content (1 step); large file -> outline + preview + hint (1 step) */
+static void read_smart(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) { fprintf(stderr, "error: cannot open %s\n", path); exit(1); }
-    size_t total = 0;
-    int c;
-    while ((c = fgetc(f)) != EOF) total++;
-    rewind(f);
-
-    char line[4096];
-    size_t printed = 0;
-    int lineno = 0, blanks = 0, emitted = 0;
-    while (fgets(line, sizeof(line), f)) {
-        lineno++;
-        size_t len = strlen(line);
-        len = strip_ansi(line, len);
-        len = normalize_newlines(line, len);
-        line[len] = '\0';
-        len = lstrip(line);
-        len = collapse_spaces(line, len);
-        if (is_blank_line(line)) {
-            if (blanks >= 1) continue;
-            blanks++;
-        } else {
-            blanks = 0;
-        }
-        if (len && line[len - 1] == '\n') line[--len] = '\0';
-        while (len && (line[len - 1] == ' ' || line[len - 1] == '\t' || line[len - 1] == '\r'))
-            line[--len] = '\0';
-
-        char pre[24];
-        int plen = snprintf(pre, sizeof(pre), "|%d:", lineno);
-        if (printed + (size_t)plen + len > MAX_CHARS) break;
-        if (!emitted) printf("[T:%d/%zu]FILE:%s@%d", (int)MAX_CHARS, total, path, lineno);
-        fputs(pre, stdout);
-        fputs(line, stdout);
-        printed += (size_t)plen + len;
-        emitted++;
-    }
+    char tmp[4096];
+    long lines = 0;
+    while (fgets(tmp, sizeof(tmp), f)) lines++;
     fclose(f);
-    if (!emitted) printf("[T:%d/%zu]FILE:%s@0", (int)MAX_CHARS, total, path);
-    printf("\n");
+
+    if (lines <= (long)MAX_LINES) {
+        read_lines(path, 1, 0);
+        return;
+    }
+
+    char *oa[] = {"ast-grep", "outline", (char*)path, "--color", "never", NULL};
+    run_cmd(oa, 5);
+    read_lines(path, 1, 40);
+    printf("\n[LARGE %ld lines] use trim lines %s <start> <end> to read a range; batch reads with trim par\n",
+           lines, path);
 }
 
 static void read_lines(const char *path, int start, int end) {
@@ -306,8 +308,7 @@ static void read_lines(const char *path, int start, int end) {
     rewind(f);
 
     char line[4096];
-    size_t printed = 0;
-    int lineno = 0, blanks = 0, emitted = 0;
+    int lineno = 0, blanks = 0, emitted = 0, truncated = 0;
     while (fgets(line, sizeof(line), f)) {
         lineno++;
         if (lineno < start) continue;
@@ -329,16 +330,16 @@ static void read_lines(const char *path, int start, int end) {
             line[--len] = '\0';
 
         char pre[24];
-        int plen = snprintf(pre, sizeof(pre), "|%d:", lineno);
-        if (printed + (size_t)plen + len > MAX_CHARS) break;
-        if (!emitted) printf("[T:%d/%zu]FILE:%s@%d", (int)MAX_CHARS, total, path, lineno);
+        snprintf(pre, sizeof(pre), "|%d:", lineno);
+        if (emitted >= MAX_LINES) { truncated = 1; break; }
+        if (!emitted) printf("[T:%d/%zu]FILE:%s@%d", (int)MAX_LINES, total, path, lineno);
         fputs(pre, stdout);
         fputs(line, stdout);
-        printed += (size_t)plen + len;
         emitted++;
     }
     fclose(f);
     if (!emitted) printf("[T:%d/%zu]FILE:%s@0", (int)MAX_CHARS, total, path);
+    if (truncated) printf(" — %s", HINT_PAR);
     printf("\n");
 }
 
@@ -388,15 +389,17 @@ int main(int argc, char **argv) {
 
     if (is_read(cmd)) {
         if (argc < 3) { fprintf(stderr, "error: missing file path\n"); return 1; }
-        read_file(argv[2]);
+        read_smart(argv[2]);
         return 0;
     }
 
-    if (!strcmp(cmd, "sed")) {
-        if (argc < 4) { fprintf(stderr, "error: usage: trim sed <file> <n> [<m>]\n"); return 1; }
+    if (is_lines(cmd)) {
+        if (argc < 4) { fprintf(stderr, "error: usage: trim lines <file> <start> [<end>]\n"); return 1; }
         int start = atoi(argv[3]);
-        int end = argc > 4 ? atoi(argv[4]) : 0;
+        int end = 0;
+        if (argc > 4 && strcmp(argv[4], "$")) end = atoi(argv[4]);
         if (start < 1) { fprintf(stderr, "error: start line must be >= 1\n"); return 1; }
+        if (end > 0 && end < start) { fprintf(stderr, "error: end line must be >= start\n"); return 1; }
         read_lines(argv[2], start, end);
         return 0;
     }

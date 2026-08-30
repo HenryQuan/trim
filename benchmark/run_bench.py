@@ -2,7 +2,7 @@
 """Benchmark: one opencode session per arm over the 12 tasks, then compare.
 
 Arm 1 "trim":   henry-guide skill + trim on PATH (trim rg / trim outline / trim sed / trim diff).
-Arm 2 "notrim": no skill, no trim — agent reads files however it likes.
+Arm 2 "vanilla": no skill, no trim — agent reads files however it likes.
 
 For each arm it records wall time, token usage (from --format json stream) and
 accuracy = number of tasks whose gold patch file was modified (proxy).
@@ -41,7 +41,7 @@ TRIM_PROMPT = (
     "4. After a change, review your diff (trim diff) instead of running tests — they cannot run here.\n"
     "5. Fix all 12; do not stop early."
 )
-NOTRIM_PROMPT = (
+VANILLA_PROMPT = (
     "There are 12 bug reports, one per subdirectory task01..task12 (see tasks.md). Fix the bug in "
     "each codebase; do not stop until all 12 are fixed. Use whatever tools or approach you like. "
     "Note: you have NO network access and no runtime interpreters — do not attempt curl, wget, "
@@ -69,17 +69,33 @@ def reset_all() -> None:
                        capture_output=True, text=True)
 
 
+ARMS = {
+    "trim":    {"config": "opencode.offline.json", "prompt": TRIM_PROMPT,    "path": ROOT},
+    "vanilla": {"config": "opencode.offline.json", "prompt": VANILLA_PROMPT},
+    "trimcmd": {"config": "opencode.trim.json",    "prompt": VANILLA_PROMPT, "path": ROOT, "no_skill": True,
+                "trim_max": os.environ.get("TRIM_MAX_CHARS", "4321")},
+    "rtk":     {"config": "opencode.rtk.json",     "prompt": VANILLA_PROMPT, "no_skill": True},
+    "trimrtk": {"config": "opencode.trimrtk.json", "prompt": VANILLA_PROMPT, "path": ROOT, "no_skill": True},
+}
+ALL_ARMS = list(ARMS)
+
+
 def run_arm(arm: str) -> dict:
+    meta = ARMS[arm]
     gen_tasks_md()
     env = dict(os.environ)
-    env["OPENCODE_CONFIG"] = str(OFFLINE_CONFIG)     # deny webfetch/websearch + curl/wget
-    if arm == "trim":
-        env["PATH"] = str(ROOT) + os.pathsep + env.get("PATH", "")
-        prompt = TRIM_PROMPT
+    env["OPENCODE_CONFIG"] = str(BENCH / meta["config"])     # offline bans + optional hook plugin
+    p = meta.get("path")
+    if p:
+        env["PATH"] = str(p) + os.pathsep + env.get("PATH", "")
     else:
-        env["PATH"] = os.pathsep.join(p for p in env.get("PATH", "").split(os.pathsep)
-                                      if p and p.rstrip("\\/") != str(ROOT).rstrip("\\/"))
-        prompt = NOTRIM_PROMPT
+        env["PATH"] = os.pathsep.join(x for x in env.get("PATH", "").split(os.pathsep)
+                                      if x and x.rstrip("\\/") != str(ROOT).rstrip("\\/"))
+    if meta.get("no_skill"):
+        env["OPENCODE_DISABLE_EXTERNAL_SKILLS"] = "1"     # keep henry-guide out of the pure tool arms
+    if meta.get("trim_max"):
+        env["TRIM_MAX_CHARS"] = meta["trim_max"]
+    prompt = meta["prompt"]
 
     OUT.mkdir(parents=True, exist_ok=True)
     json_path = OUT / f"{arm}.json"
@@ -196,7 +212,7 @@ def report(saved: dict) -> None:
 
 def load_saved() -> dict:
     saved = {}
-    for arm in ("trim", "notrim"):
+    for arm in ALL_ARMS:
         p = OUT / f"{arm}.result.json"
         if p.exists():
             saved[arm] = json.loads(p.read_text(encoding="utf-8"))
@@ -205,7 +221,7 @@ def load_saved() -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arm", choices=["trim", "notrim"], help="run a single arm")
+    ap.add_argument("--arm", choices=ALL_ARMS, help="run a single arm")
     ap.add_argument("--report", action="store_true", help="print comparison from saved results")
     ap.add_argument("--rerun", action="store_true",
                     help="discard saved results and rerun all pending arms")
@@ -220,16 +236,17 @@ def main() -> None:
 
     saved = load_saved()
     if args.rerun:
-        for arm in ("trim", "notrim"):
+        for arm in ALL_ARMS:
             (OUT / f"{arm}.result.json").unlink(missing_ok=True)
             (OUT / f"{arm}.json").unlink(missing_ok=True)
         saved = {}
     if not args.arm:
-        if len(saved) == 2:
+        pending = [a for a in ALL_ARMS if a not in saved]
+        if not pending:
             report(saved)
             return
-    arms = [args.arm] if args.arm else [a for a in ("trim", "notrim") if a not in saved]
-    for i, arm in enumerate(arms):
+    arms = [args.arm] if args.arm else [a for a in ALL_ARMS if a not in saved]
+    for arm in arms:
         reset_all()
         saved[arm] = run_arm(arm)
     report(saved)

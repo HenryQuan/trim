@@ -129,6 +129,24 @@ static size_t normalize_newlines(char *s, size_t n) {
     return w;
 }
 
+/* collapse literal backslash escapes (\r\n, \n, \r, \t) to a single space; returns new length */
+static size_t collapse_escapes(char *s, size_t n) {
+    size_t w = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (s[i] == '\\' && i + 1 < n) {
+            char c = s[i + 1];
+            if (c == 'n' || c == 't' || c == 'r') {
+                if (c == 'r' && i + 2 < n && s[i + 2] == 'n') i++; /* \r\n -> skip the n too */
+                s[w++] = ' ';
+                i++;
+                continue;
+            }
+        }
+        s[w++] = s[i];
+    }
+    return w;
+}
+
 /* strip leading spaces/tabs in place (NUL-terminated); returns new length */
 static size_t lstrip(char *s) {
     size_t i = 0;
@@ -316,6 +334,7 @@ static void read_lines(const char *path, int start, int end) {
         size_t len = strlen(line);
         len = strip_ansi(line, len);
         len = normalize_newlines(line, len);
+        len = collapse_escapes(line, len);
         line[len] = '\0';
         len = lstrip(line);
         len = collapse_spaces(line, len);

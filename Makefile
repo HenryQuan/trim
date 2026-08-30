@@ -1,17 +1,18 @@
 CC = gcc
 CFLAGS = -O2 -s
+SRCS = src/main.c src/util.c src/exec.c src/compact.c src/read.c
 
-trim: trim.c
-	$(CC) $(CFLAGS) -o $@ $^
+trim: $(SRCS) src/trim.h
+	$(CC) $(CFLAGS) -o $@ $(SRCS)
 
-trim.exe: trim.c
-	$(CC) $(CFLAGS) -o $@ $^
+trim.exe: $(SRCS) src/trim.h
+	$(CC) $(CFLAGS) -o $@ $(SRCS)
 
-trm: trim.c
-	$(CC) $(CFLAGS) -o $@ $^
+trm: $(SRCS) src/trim.h
+	$(CC) $(CFLAGS) -o $@ $(SRCS)
 
-trm.exe: trim.c
-	$(CC) $(CFLAGS) -o $@ $^
+trm.exe: $(SRCS) src/trim.h
+	$(CC) $(CFLAGS) -o $@ $(SRCS)
 
 .PHONY: clean
 clean:

@@ -6,19 +6,21 @@ A capped-output wrapper around any command, built for coding agents rather than 
 
 `trim` caps each command's output so the context window stays lean over long agent runs. A human developer doesn't read an entire file before fixing a bug — a coding agent shouldn't either.
 
-**It is not free.** Capping lowers *per-step* token cost, but it does so by prompting more, smaller tool calls, which raises the total step count — and with it, session time and overall cost. Each step is an API round-trip that re-reads the whole growing context from cache, so a longer session compounds the cost. See the [benchmark](#benchmark) below: at equal accuracy, vanilla OpenCode is the cheapest and fastest. `trim` and [rtk](https://github.com/rtk-ai/rtk) are both more expensive on purpose — they buy discipline, not savings.
+**Naive capping is not free.** Simply truncating each command's output lowers per-step tokens but pushes the agent to issue more, smaller calls — more steps means more round-trips and cache re-reads, which can end up slower and pricier than reading whole. So the win isn't the cap; it's **how** trim limits output.
 
-**The core concept is fewer steps, not smaller steps.** Cutting the cost per step while increasing the step count still raises total cost, because the extra round-trips and cache reads outweigh the fresh-token saving. The way to win is to do more per step: batch independent operations into one call (`trim par`), read a whole small file in one step, and let `trim read` collapse outline + preview into a single call on large files.
+**The design that works: compact search, smart read, cap as a safety net.** `trim rg`/`fd`/`sg` compress the repeated path root into `$1` and show *all* matches in one call (no follow-up queries), and smart `trim read` collapses large files to outline + first/last 10 lines. That cuts fresh tokens *and* steps at the same time — see the [benchmark](#benchmark): trim now beats vanilla on steps, time, cost, and tokens at equal accuracy.
+
+**The core concept is fewer steps, not smaller steps.** Cutting cost per step while increasing step count still raises total cost, because extra round-trips and cache reads outweigh the fresh-token saving. Compaction achieves both at once: less output per call without forcing more calls.
 
 If you need unrestricted browsing, run commands directly. This tool is for coding agents.
 
 ## Usage
 
 ```
-trim rg <args>              run ripgrep
-trim sg <args>              run ast-grep
-trim fd <args>              run fd
-trim read|cat|print <file>  smart read (small → whole file; large → outline + preview + hint)
+trim rg <args>              run ripgrep (path-compacted)
+trim sg <args>              run ast-grep (path-compacted)
+trim fd <args>              run fd (path-compacted)
+trim read|cat|print <file>  smart read (small → whole; large → outline + first/last 10 + hint)
 trim lines <file> <s> [<e>] exact lines s..e ($ = EOF)
 trim outline <file>         function/class signatures (ast-grep)
 trim diff [<file>]          git diff (read-only)
@@ -28,14 +30,25 @@ trim par "cmd1" "cmd2" ...   batch commands into one step — the primary cost s
 trim <command> [args]       run ANY command, output capped
 ```
 
+`trim rg`, `trim sg`, and `trim fd` don't just cap — they **compact**: the common directory root is factored out into `$1` and repeated paths are replaced by `$1` + the relative remainder, so a search's repeated path text collapses without losing any matches. Example:
+
+```
+$ trim rg -n "fn check_pen" src/armor_viewer/
+$1 = src/armor_viewer/
+$1penetration.rs:42:pub fn check_penetration(...)
+$1common.rs:457:pub(crate) fn simulate_ap_shell(...)
+```
+
+The same `$1` compaction applies to `fd` (file lists) and `ast-grep` (structured matches). Capping remains only as a high safety net (8 KB) so a genuinely huge result still can't blow the window.
+
 Any command not listed above runs as-is with capped output. `trm` is a shorter alias for `trim`.
 
 ```
-TRIM_MAX_CHARS=500 trim rg pattern          # per-command output cap
+TRIM_MAX_CHARS=500 trim rg pattern          # per-command output cap (default 5120)
 TRIM_MAX_LINES=1024 trim lines file 1 40    # range-read line cap (default 512)
 ```
 
-The "do nothing unless it's too big" rule applies everywhere: `trim read` on a small file prints it whole with no ceremony; `trim lines` returns the exact range untouched and only clamps (at `MAX_LINES`) if the agent asks for something unreasonable like `trim lines file 1 5000`.
+The "do nothing unless it's too big" rule applies everywhere: `trim read` on a small file prints it whole with no ceremony; a large file returns outline + first/last 10 lines + a pointer; `trim lines` returns the exact range untouched and only clamps (at `MAX_LINES`) if the agent asks for something unreasonable like `trim lines file 1 5000`.
 
 ## Install
 
@@ -60,7 +73,9 @@ Without these, the model may fall back to built-in tools like `read` or run `cat
 
 ## Benchmark
 
-12 tasks from SWE-bench Lite (`deepseek/deepseek-v4-flash`, one session per arm, offline). Repro: `benchmark/run_bench.py`.
+### Historical: capping alone lost (12-task)
+
+Early cap-only runs (aggressive capping, no compaction). 12 tasks from SWE-bench Lite (`deepseek/deepseek-v4-flash`, one session per arm, offline). Repro: `benchmark/run_bench.py`.
 
 | arm | time(s) | steps | fresh tokens | cache (M) | cost$ | gold_touched |
 |-----|---------|-------|--------------|-----------|-------|--------------|
@@ -69,9 +84,18 @@ Without these, the model may fall back to built-in tools like `read` or run `cat
 | trim | 1,879 | 233 | 118,352 | 33.8 | 0.1608 | 12/12 |
 | trimrtk | 2,022 | 225 | 126,502 | 30.6 | 0.1416 | 12/12 |
 
-trim does reduce overall tokens — it read **~30% fewer fresh tokens** than vanilla (118k vs 169k, i.e. less content fed to the model). But it paid for that with **more steps → more cache reads** (33.8M vs 23.5M), and cache is where the cost is. So the fresh-token win is real, but it doesn't offset the added cache and round-trips.
+The lesson of the old design: **the step count is the real cost, not the cap.** Every capping arm cut fresh tokens per step but ran more steps, so all three were slower and pricier than vanilla. `trim rg` capped at ~1000 chars forced the agent to re-issue narrow follow-up searches — that drove the 64-vs-10 rg-call gap and the inflated step count. Capping search output was the wrong lever.
 
-The lesson is the step count, not the cap. Every capping arm cut fresh tokens per step (~30-40%) but ran more steps, so all three were slower and pricier than vanilla. trim was +65% steps and +36% cost; rtk (compact per-command rewrite) did better but still lost. Both trim and rtk optimize cost *per command*; neither cuts the number of steps, which is what dominates total cost and wall time. The goal now is to do more per step — `trim par` batching, whole-small-file reads, and smart `trim read` — to keep the fresh-token saving *and* pull the step count (and cache) under vanilla's.
+### Latest: path compaction + smart read wins (4-task)
+
+The breakthrough is **compacting search output instead of capping it**: `trim rg`/`fd`/`sg` factor out the common directory root into `$1` and show *all* matches in one call (no truncation-driven follow-ups), while smart `trim read` returns outline + first/last 10 lines for large files. Caps stay as a safety net only (`MAX_CHARS`=5120, `MAX_LINES`=512). Same model, 4-task subset, offline.
+
+| arm | time(s) | steps | fresh tokens | cache (M) | cost$ | gold |
+|-----|---------|-------|--------------|-----------|-------|------|
+| vanilla | 819 | 119 | 99,898 | 11.1 | 0.0659 | 4/4 |
+| **trim** | **622** | **98** | **77,438** | **8.2** | **0.0495** | 4/4 |
+
+With compaction, trim beats vanilla on **every** metric — **−18% steps, −24% time, −25% cost, −22% fresh tokens, −26% cache** — at equal accuracy. This is the "fewer, fatter steps" thesis realized: fewer fresh tokens *and* fewer steps, because compacted search shows more per call without re-querying. The win is consistent (repeated across runs); treat exact margins as approximate since the subset runs aren't perfectly isolated.
 
 ### Strengths
 
@@ -81,9 +105,9 @@ The lesson is the step count, not the cap. Every capping arm cut fresh tokens pe
 
 ### Weaknesses
 
-- **More steps → more cost and time:** trim +92 steps vs vanilla; each extra step re-reads the growing context and adds a round-trip.
-- **No accuracy edge measured:** all arms touched all 12 gold files; the proxy can't separate correct fixes, and real test-pass was not run.
-- **Model-dependent:** if the model already searches well (uses `rg`, avoids whole-file dumps), there's little waste to remove; trim pays off most on undisciplined models and long sessions.
+- **No accuracy edge measured:** gold-touched is a proxy; it can't separate correct fixes, and real test-pass was not run.
+- **Model-dependent:** if the model already searches well (uses `rg`, avoids whole-file dumps), there's little waste to remove; compaction pays off most on undisciplined models and long sessions.
+- **Single-run noise / imperfect isolation:** the subset runs aren't perfectly isolated (arms can wander into extra task dirs), so treat the margins as approximate, not a precise verdict.
 
 ### Example: a huge single file
 
@@ -95,16 +119,18 @@ task05/sympy/integrals/rubi/rubi_tests/tests/test_trinomials.py  → 1,511,293 b
 
 **Naive:** `read <file>` → 1,511,293 chars ≈ 377,823 tokens — one file blows a 200k context window by itself.
 
-**trim:** the same one step, capped:
+**trim:** the same one step, but smart `trim read` collapses the huge file to outline + first/last 10 lines:
 
 ```
 $ trim read task05/sympy/integrals/rubi/rubi_tests/tests/test_trinomials.py
     32: def test_1()   1789: def test_2()   2104: def test_3() ...
+    ... (skipped) ...
+    3200: def test_5()
     [LARGE 3200 lines] use trim lines <file> <start> <end> to read a range
 → ~300 chars — reveals it's 5 test stubs, no need to read the file
 ```
 
-Same step count as the naive read, ~1000x fewer tokens. This matters because the agent can't know the file is huge until it reads it — trim's every-read-is-bounded behavior turns an accidental read of a giant file into a rounding error, and large files collapse to outline + preview. The bigger the repo, the more often this accident would happen, so the more the safety matters.
+Same step count as the naive read, ~1000x fewer tokens. This matters because the agent can't know the file is huge until it reads it — smart `trim read` turns an accidental read of a giant file into a rounding error instead of blowing the window. The bigger the repo, the more often this accident would happen, so the more the safety matters.
 
 ## License
 

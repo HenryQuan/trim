@@ -30,7 +30,7 @@ trim par "cmd1" "cmd2" ...   batch commands into one step — the primary cost s
 trim <command> [args]       run ANY command, output capped
 ```
 
-`trim rg`, `trim sg`, and `trim fd` don't just cap — they **compact**: the common directory root is factored out into `$1` and repeated paths are replaced by `$1` + the relative remainder, so a search's repeated path text collapses without losing any matches. Example:
+`trim rg`, `trim sg`, and `trim fd` don't just cap — they **compact**: repeated substrings are factored out into reference refs `$1`..`$3` (lossless), so a search's repeated path text collapses without losing any matches. Example:
 
 ```
 $ trim rg -n "fn check_pen" src/armor_viewer/
@@ -39,7 +39,7 @@ $1penetration.rs:42:pub fn check_penetration(...)
 $1common.rs:457:pub(crate) fn simulate_ap_shell(...)
 ```
 
-The same `$1` compaction applies to `fd` (file lists) and `ast-grep` (structured matches). Capping remains only as a high safety net (8 KB) so a genuinely huge result still can't blow the window.
+The same compaction applies to `fd` (file lists) and `ast-grep` (structured matches). Capping remains only as a high safety net (8 KB) so a genuinely huge result still can't blow the window. The more matches share path prefixes, the bigger the win — rg/fd output can collapse by an order of magnitude or more.
 
 Any command not listed above runs as-is with capped output. `trm` is a shorter alias for `trim`.
 
@@ -50,12 +50,18 @@ TRIM_MAX_LINES=1024 trim lines file 1 40    # range-read line cap (default 512)
 
 The "do nothing unless it's too big" rule applies everywhere: `trim read` on a small file prints it whole with no ceremony; a large file returns outline + first/last 10 lines + a pointer; `trim lines` returns the exact range untouched and only clamps (at `MAX_LINES`) if the agent asks for something unreasonable like `trim lines file 1 5000`.
 
-## Install
+## Build
+
+The sources are split across `src/` (`main.c`, `util.c`, `exec.c`, `compact.c`, `read.c`, `trim.h`). Builds are strict — every `-Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings -Wstrict-prototypes` warning is fatal (`-Werror`):
 
 ```sh
-gcc -O2 -s -o trim trim.c       # Linux/macOS
-gcc -O2 -s -o trim.exe trim.c   # Windows (MinGW)
-make trim                        # or use the Makefile
+make trim            # Linux/macOS; use `make trim.exe` on Windows (MinGW)
+# or directly:
+gcc -O2 -s -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings \
+    -Wstrict-prototypes -Werror -o trim src/main.c src/util.c src/exec.c \
+    src/compact.c src/read.c
+
+make format          # clang-format all src files (uses .clang-format, 4-space)
 ```
 
 ## PI
@@ -65,7 +71,7 @@ Pi agent extensions that enforce the same discipline at the tool level:
 | File | Purpose |
 |------|---------|
 | `enforce-trm.ts` | Auto-prefixes `trim ` to every bash command that doesn't start with it |
-| `bash-cap.ts` | Caps ALL bash output at `TRIM_MAX_CHARS`, same format as `trim.c` |
+| `bash-cap.ts` | Caps ALL bash output at `TRIM_MAX_CHARS`, same format as `trim` |
 | `APPEND_SYSTEM.md` | Appends trim rules to the system prompt as a text-level reminder |
 | `enforce-ask.ts` | Detects agent self-doubt keywords mid-stream and aborts, forcing it to ask the user |
 

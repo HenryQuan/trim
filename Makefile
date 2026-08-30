@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -O2 -s
+CFLAGS = -O2 -s -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings -Wstrict-prototypes -Werror
 SRCS = src/main.c src/util.c src/exec.c src/compact.c src/read.c
 
 trim: $(SRCS) src/trim.h

@@ -314,7 +314,7 @@ char *compact_paths(const char *s, size_t *out_n) {
 
 /* shared for rg / sg / fd: compact output, cap only as a safety net
  * (line-aligned) */
-void cmd_search(char **args, int argc) {
+void cmd_search(const char *const *args, int argc) {
     char *out = run_cmd_capture(args, argc);
     if (!out)
         return;

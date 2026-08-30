@@ -99,7 +99,7 @@ int run_cmd_str(const char *cmd) {
     return rc;
 }
 
-void run_cmd(char **args, int argc) {
+void run_cmd(const char *const *args, int argc) {
     char buf[4096];
     int pos = 0;
     buf[0] = '\0';
@@ -164,7 +164,7 @@ char *run_capture(const char *cmd) {
     return out;
 }
 
-char *run_cmd_capture(char **args, int argc) {
+char *run_cmd_capture(const char *const *args, int argc) {
     char buf[4096];
     int pos = 0;
     buf[0] = '\0';
@@ -187,7 +187,7 @@ char *run_cmd_capture(char **args, int argc) {
 
 /* trim par "cmd1" "cmd2" ... — run each command, each output capped separately
  */
-void cmd_par(int argc, char **argv) {
+void cmd_par(int argc, const char *const *argv) {
     int shown = 0;
     for (int i = 0; i < argc; i++) {
         if (!argv[i] || !argv[i][0])

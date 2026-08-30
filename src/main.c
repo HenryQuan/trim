@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
             fprintf(stderr, "error: usage: trim outline <file>\n");
             return 1;
         }
-        cmd_outline(argc, argv);
+        cmd_outline(argc, (const char *const *)argv);
         return 0;
     }
 
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
     }
 
     if (!strcmp(cmd, "log")) {
-        cmd_log(argc, argv);
+        cmd_log(argc, (const char *const *)argv);
         return 0;
     }
 
@@ -105,28 +105,28 @@ int main(int argc, char **argv) {
             fprintf(stderr, "error: usage: trim par \"cmd1\" \"cmd2\" ...\n");
             return 1;
         }
-        cmd_par(argc - 2, argv + 2);
+        cmd_par(argc - 2, (const char *const *)argv + 2);
         return 0;
     }
 
     if (!strcmp(cmd, "rg")) {
-        cmd_search(argv + 1, argc - 1);
+        cmd_search((const char *const *)argv + 1, argc - 1);
         return 0;
     }
 
     if (!strcmp(cmd, "sg") || !strcmp(cmd, "ast-grep")) {
-        argv[1] = "ast-grep";
-        cmd_search(argv + 1, argc - 1);
+        argv[1] = (char *)"ast-grep";
+        cmd_search((const char *const *)argv + 1, argc - 1);
         return 0;
     }
 
     if (!strcmp(cmd, "fd")) {
-        argv[1] = "fd";
-        cmd_search(argv + 1, argc - 1);
+        argv[1] = (char *)"fd";
+        cmd_search((const char *const *)argv + 1, argc - 1);
         return 0;
     }
     /* anything else: run as-is, output capped */
 
-    run_cmd(argv + 1, argc - 1);
+    run_cmd((const char *const *)argv + 1, argc - 1);
     return 0;
 }

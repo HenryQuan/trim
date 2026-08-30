@@ -64,7 +64,8 @@ void read_lines(const char *path, int start, int end) {
     rewind(f);
 
     char line[4096];
-    int lineno = 0, blanks = 0, emitted = 0, truncated = 0;
+    int lineno = 0, blanks = 0, truncated = 0;
+    size_t emitted = 0;
     while (fgets(line, sizeof(line), f)) {
         lineno++;
         if (lineno < start)
@@ -133,8 +134,7 @@ void read_smart(const char *path) {
     }
 
     defer_flush = 1;
-    char *oa[] = {"ast-grep", "outline", (char *)path,
-                  "--color",  "never",   NULL};
+    const char *oa[] = {"ast-grep", "outline", path, "--color", "never", NULL};
     char *ol = run_cmd_capture(oa, 5);
     if (ol) {
         oadd(ol);
@@ -152,8 +152,8 @@ void read_smart(const char *path) {
     oflush();
 }
 
-void cmd_outline(int argc, char **argv) {
-    char *args[256];
+void cmd_outline(int argc, const char *const *argv) {
+    const char *args[256];
     int n = 0;
     args[n++] = "ast-grep";
     args[n++] = "outline";
@@ -167,21 +167,21 @@ void cmd_outline(int argc, char **argv) {
 
 void cmd_diff(const char *file) {
     if (file) {
-        char *args[] = {"git", "diff", "--color=never", (char *)file, NULL};
+        const char *args[] = {"git", "diff", "--color=never", file, NULL};
         run_cmd(args, 4);
     } else {
-        char *args[] = {"git", "diff", "--color=never", NULL};
+        const char *args[] = {"git", "diff", "--color=never", NULL};
         run_cmd(args, 3);
     }
 }
 
 void cmd_blame(const char *file) {
-    char *args[] = {"git", "blame", (char *)file, NULL};
+    const char *args[] = {"git", "blame", file, NULL};
     run_cmd(args, 3);
 }
 
-void cmd_log(int argc, char **argv) {
-    char *args[256];
+void cmd_log(int argc, const char *const *argv) {
+    const char *args[256];
     int n = 0;
     args[n++] = "git";
     args[n++] = "log";

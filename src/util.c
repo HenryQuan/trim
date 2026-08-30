@@ -34,14 +34,13 @@ int is_lines(const char *s) {
     return !strcmp(s, "lines") || !strcmp(s, "l") || !strcmp(s, "sed");
 }
 
-static const char *HINT = "\n[TRUNCATED:%zu/%zuc] %s\n";
-
 void cap(const char *s, int truncated, size_t total_chars, const char *hint) {
     size_t len = strlen(s);
     if (truncated || len > MAX_CHARS) {
         size_t n = len < MAX_CHARS ? len : MAX_CHARS;
         fwrite(s, 1, n, stdout);
-        printf(HINT, MAX_CHARS, total_chars, hint ? hint : HINT_PAR);
+        printf(" [TRUNCATED:%zu/%zuc] %s ", MAX_CHARS, total_chars,
+               hint ? hint : HINT_PAR);
     } else {
         fputs(s, stdout);
     }

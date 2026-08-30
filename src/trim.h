@@ -36,6 +36,7 @@ size_t collapse_escapes(char *s, size_t n);
 size_t lstrip(char *s);
 size_t lstrip_lines(char *s, size_t n);
 size_t collapse_spaces(char *s, size_t n);
+size_t rtrim_lines(char *s, size_t n);
 int is_blank_line(const char *s);
 
 /* exec.c — command execution */

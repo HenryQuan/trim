@@ -51,14 +51,28 @@ int run_cmd_str(const char *cmd) {
     while ((ch = fgetc(p)) != EOF && n < sizeof(out) - 1)
         out[n++] = (char)ch;
     out[n] = '\0';
-    size_t total = n;
-    while ((ch = fgetc(p)) != EOF) total++;
+    while ((ch = fgetc(p)) != EOF) { /* drain rest so pclose doesn't block */ }
     n = strip_ansi(out, n);
     n = normalize_newlines(out, n);
     n = collapse_blanks(out, n);
     n = lstrip_lines(out, n);
+    n = collapse_spaces(out, n);
+    n = rtrim_lines(out, n);
     out[n] = '\0';
-    cap(out, n > MAX_CHARS, total, pick_hint(cmd));
+    /* compact first (lossless), then cap at a line boundary */
+    size_t cn = 0;
+    char *comp = compact_paths(out, &cn);
+    if (cn > MAX_CHARS) {
+        size_t cut = MAX_CHARS;
+        while (cut > 0 && comp[cut - 1] != '\n') cut--;
+        if (cut == 0) cut = MAX_CHARS;
+        fwrite(comp, 1, cut, stdout);
+        printf("\n[TRUNCATED:%zu/%zu] %s\n", cut, cn, pick_hint(cmd));
+    } else {
+        fwrite(comp, 1, cn, stdout);
+        if (cn && comp[cn - 1] != '\n') fputc('\n', stdout);
+    }
+    free(comp);
     int rc = pclose(p);
 #ifndef _WIN32
     if (rc == -1) return 1;
@@ -114,6 +128,8 @@ char *run_capture(const char *cmd) {
     n = normalize_newlines(out, n);
     n = collapse_blanks(out, n);
     n = lstrip_lines(out, n);
+    n = collapse_spaces(out, n);
+    n = rtrim_lines(out, n);
     out[n] = '\0';
     return out;
 }

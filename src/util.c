@@ -144,6 +144,23 @@ size_t collapse_spaces(char *s, size_t n) {
     return w;
 }
 
+/* trim trailing spaces/tabs/\r from every line in place; returns new length */
+size_t rtrim_lines(char *s, size_t n) {
+    size_t w = 0, i = 0;
+    while (i < n) {
+        size_t j = i;
+        while (j < n && s[j] != '\n') j++;
+        size_t e = j;
+        while (e > i && (s[e - 1] == ' ' || s[e - 1] == '\t' || s[e - 1] == '\r')) e--;
+        size_t len = e - i;
+        memmove(s + w, s + i, len);
+        w += len;
+        if (j < n) s[w++] = '\n';
+        i = j + 1;
+    }
+    return w;
+}
+
 int is_blank_line(const char *s) {
     while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') s++;
     return *s == '\0';

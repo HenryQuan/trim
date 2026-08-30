@@ -1,4 +1,42 @@
 #include "trim.h"
+#include <stdarg.h>
+
+/* growable output buffer that read/lines build into, then compact + emit once */
+static char *obuf = NULL;
+static size_t olen = 0, ocap = 0;
+static int defer_flush = 0;
+
+static void oadd(const char *s) {
+    size_t n = strlen(s);
+    if (olen + n + 1 > ocap) {
+        ocap = ocap ? ocap * 2 : 8192;
+        while (ocap < olen + n + 1) ocap *= 2;
+        obuf = realloc(obuf, ocap);
+    }
+    memcpy(obuf + olen, s, n);
+    olen += n;
+}
+
+static void ofmt(const char *fmt, ...) {
+    char tmp[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(tmp, sizeof(tmp), fmt, ap);
+    va_end(ap);
+    oadd(tmp);
+}
+
+static void oflush(void) {
+    if (!obuf) return;
+    obuf[olen] = '\0';
+    size_t cn = 0;
+    char *comp = compact_paths(obuf, &cn);
+    fwrite(comp, 1, cn, stdout);
+    if (cn && comp[cn - 1] != '\n') fputc('\n', stdout);
+    free(comp);
+    free(obuf);
+    obuf = NULL; olen = 0; ocap = 0;
+}
 
 void read_lines(const char *path, int start, int end) {
     FILE *f = fopen(path, "r");
@@ -40,18 +78,19 @@ void read_lines(const char *path, int start, int end) {
         char pre[24];
         snprintf(pre, sizeof(pre), "|%d:", lineno);
         if (emitted >= MAX_LINES) { truncated = 1; break; }
-        if (!emitted) printf("[T:%d/%zu]FILE:%s@%d", (int)MAX_LINES, total, path, lineno);
-        fputs(pre, stdout);
-        fputs(line, stdout);
+        if (!emitted) ofmt("[T:%d/%zu]FILE:%s@%d", (int)MAX_LINES, total, path, lineno);
+        oadd(pre);
+        oadd(line);
         emitted++;
     }
     fclose(f);
-    if (!emitted) printf("[T:%d/%zu]FILE:%s@0", (int)MAX_CHARS, total, path);
-    if (truncated) printf(" — %s", HINT_PAR);
-    printf("\n");
+    if (!emitted) ofmt("[T:%d/%zu]FILE:%s@0", (int)MAX_CHARS, total, path);
+    if (truncated) oadd(" — prefer trim par \"a\" \"b\" ...");
+    oadd("\n");
+    if (!defer_flush) oflush();
 }
 
-/* smart read: small file -> whole content (1 step); large file -> outline + preview + hint (1 step) */
+/* smart read: small file -> whole content; large file -> outline + first/last 10 + hint */
 void read_smart(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) { fprintf(stderr, "error: cannot open %s\n", path); exit(1); }
@@ -65,12 +104,16 @@ void read_smart(const char *path) {
         return;
     }
 
+    defer_flush = 1;
     char *oa[] = {"ast-grep", "outline", (char*)path, "--color", "never", NULL};
-    run_cmd(oa, 5);
+    char *ol = run_cmd_capture(oa, 5);
+    if (ol) { oadd(ol); if (ol[0] && ol[strlen(ol) - 1] != '\n') oadd("\n"); free(ol); }
     read_lines(path, 1, 10);
-    printf("\n  ... (skipped) ...\n");
+    oadd("\n  ... (skipped) ...\n");
     read_lines(path, lines - 9, lines);
-    printf("\n[LARGE %ld lines] use trim lines %s <start> <end> to read a range\n", lines, path);
+    ofmt("\n[LARGE %ld lines] use trim lines %s <start> <end> to read a range\n", lines, path);
+    defer_flush = 0;
+    oflush();
 }
 
 void cmd_outline(int argc, char **argv) {

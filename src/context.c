@@ -111,6 +111,133 @@ static char *copy_text(const char *s) {
     return copy;
 }
 
+#define MAX_CONTEXT_FILES 32
+
+typedef struct {
+    const char *path[MAX_CONTEXT_FILES];
+    char state[MAX_CONTEXT_FILES][4];
+    int count;
+} ContextFiles;
+
+static int file_index(const ContextFiles *files, const char *path) {
+    for (int i = 0; i < files->count; i++)
+        if (!strcmp(files->path[i], path))
+            return i;
+    return -1;
+}
+
+static void add_file(ContextFiles *files, const char *path, const char *state) {
+    if (!path || !path[0] || file_index(files, path) >= 0 ||
+        files->count >= MAX_CONTEXT_FILES)
+        return;
+    files->path[files->count] = path;
+    snprintf(files->state[files->count], sizeof(files->state[0]), "%s", state);
+    files->count++;
+}
+
+static void collect_status(ContextFiles *files, char *status) {
+    char *cursor = status;
+    while (*cursor && files->count < MAX_CONTEXT_FILES) {
+        char *end = strchr(cursor, '\n');
+        if (end)
+            *end = '\0';
+        if (strlen(cursor) > 3) {
+            char state[4] = {cursor[0], cursor[1], '\0', '\0'};
+            add_file(files, cursor + 3, state);
+        }
+        if (!end)
+            break;
+        cursor = end + 1;
+    }
+}
+
+static void add_manifest(Text *t, const ContextFiles *files) {
+    section(t, "FILES");
+    for (int i = 0; i < files->count; i++) {
+        size_t bytes = 0;
+        long lines = 0;
+        if (file_stats(files->path[i], &bytes, &lines))
+            text_addf(t, "F%d %s %s bytes=%zu lines=%ld\n", i + 1,
+                      files->state[i], files->path[i], bytes, lines);
+        else
+            text_addf(t, "F%d %s %s [unavailable]\n", i + 1, files->state[i],
+                      files->path[i]);
+    }
+}
+
+static void add_index(Text *t, const ContextFiles *files) {
+    section(t, "INDEX");
+    for (int i = 0; i < files->count; i++)
+        text_addf(t, "F%d: outline, history, source; diff=%s\n", i + 1,
+                  files->state[i][0] == '?' ? "untracked" : "available");
+}
+
+static void add_capture_id(Text *t, const char *name, int id, char *out) {
+    if (!out || !out[0]) {
+        free(out);
+        return;
+    }
+    text_addf(t, "\n[%s F%d]\n", name, id);
+    text_add(t, out, strlen(out));
+    if (t->len && t->data[t->len - 1] != '\n')
+        text_add(t, "\n", 1);
+    free(out);
+}
+
+static int path_directory(const char *path, char *dir, size_t cap) {
+    size_t n = strlen(path);
+    if (n == 0 || n >= cap)
+        return 0;
+    memcpy(dir, path, n + 1);
+    size_t slash = n;
+    while (slash > 0 && dir[slash - 1] != '/' && dir[slash - 1] != '\\')
+        slash--;
+    if (slash == 0)
+        snprintf(dir, cap, ".");
+    else if (slash == 1)
+        dir[1] = '\0';
+    else
+        dir[slash - 1] = '\0';
+    return 1;
+}
+
+static int find_repo_root(const char *path, char *root, size_t cap) {
+    char dir[PATH_MAX];
+    size_t bytes = 0;
+    long lines = 0;
+    if (!file_stats(path, &bytes, &lines) &&
+        !path_directory(path, dir, sizeof(dir)))
+        return 0;
+    if (file_stats(path, &bytes, &lines))
+        path_directory(path, dir, sizeof(dir));
+    else
+        snprintf(dir, sizeof(dir), "%s", path);
+
+    const char *args[] = {"git", "-C", dir, "rev-parse", "--show-toplevel",
+                          NULL};
+    char *out = run_cmd_capture_raw(args, 5);
+    if (!out)
+        return 0;
+    char *end = strchr(out, '\n');
+    if (end)
+        *end = '\0';
+    int ok = out[0] && strlen(out) < cap;
+    if (ok)
+        memcpy(root, out, strlen(out) + 1);
+    free(out);
+    return ok;
+}
+
+static void relative_path(const char *root, const char *path, char *out,
+                          size_t cap) {
+    size_t root_len = strlen(root);
+    const char *relative = path;
+    if (root_len > 0 && !strncmp(path, root, root_len) &&
+        (path[root_len] == '/' || path[root_len] == '\\'))
+        relative = path + root_len + 1;
+    snprintf(out, cap, "%s", relative);
+}
+
 static void add_exact_range(Text *t, const char *path, long start, long end) {
     FILE *f = fopen(path, "rb");
     if (!f)
@@ -131,65 +258,62 @@ static void add_exact_range(Text *t, const char *path, long start, long end) {
     fclose(f);
 }
 
-static void add_file_context(Text *t, const char *path, int include_diff) {
+static void add_file_context(Text *t, const char *path, int id,
+                             int include_diff) {
     size_t bytes = 0;
     long lines = 0;
     if (!file_stats(path, &bytes, &lines))
         return;
 
-    text_addf(t, "\n[FILE] %s bytes=%zu lines=%ld\n", path, bytes, lines);
+    char root[PATH_MAX];
+    char relative[PATH_MAX];
+    int has_repo = find_repo_root(path, root, sizeof(root));
+    if (has_repo)
+        relative_path(root, path, relative, sizeof(relative));
+
+    text_addf(t, "\n[FILE F%d] %s bytes=%zu lines=%ld\n", id, path, bytes,
+              lines);
 
     const char *outline[] = {"ast-grep", "outline", path,
                              "--color",  "never",   NULL};
-    add_capture(t, "OUTLINE", run_cmd_capture(outline, 5));
+    add_capture_id(t, "OUTLINE", id, run_cmd_capture(outline, 5));
 
-    if (include_diff) {
+    if (include_diff && has_repo) {
         const char *diff[] = {
-            "git", "diff", "--no-ext-diff", "--color=never", "--", path, NULL};
-        add_capture(t, "WORKTREE DIFF", run_cmd_capture_raw(diff, 6));
+            "git",           "-C", root,     "diff", "--no-ext-diff",
+            "--color=never", "--", relative, NULL};
+        add_capture_id(t, "WORKTREE DIFF", id, run_cmd_capture_raw(diff, 8));
     }
 
-    const char *log[] = {"git", "log", "-5", "--oneline", "--", path, NULL};
-    add_capture(t, "RECENT HISTORY", run_cmd_capture(log, 6));
+    if (has_repo) {
+        const char *log[] = {"git",       "-C", root,     "log", "-5",
+                             "--oneline", "--", relative, NULL};
+        add_capture_id(t, "RECENT HISTORY", id, run_cmd_capture(log, 8));
+    }
 
     long head_end = lines < 80 ? lines : 80;
     if (head_end > 0) {
-        text_addf(t, "\n[SOURCE %s:1-%ld]\n", path, head_end);
+        text_addf(t, "\n[SOURCE F%d %s:1-%ld]\n", id, path, head_end);
         add_exact_range(t, path, 1, head_end);
     }
     if (lines > 80) {
         long tail_start = lines - 79;
-        text_addf(t, "\n[SOURCE %s:%ld-%ld]\n", path, tail_start, lines);
+        text_addf(t, "\n[SOURCE F%d %s:%ld-%ld]\n", id, path, tail_start,
+                  lines);
         add_exact_range(t, path, tail_start, lines);
     }
 }
 
-static void add_related_outline(Text *t, const char *path) {
+static void add_related_outline(Text *t, const char *path, int id) {
     size_t bytes = 0;
     long lines = 0;
     if (!file_stats(path, &bytes, &lines))
         return;
-    text_addf(t, "\n[RELATED FILE] %s bytes=%zu lines=%ld\n", path, bytes,
-              lines);
+    text_addf(t, "\n[RELATED FILE F%d] %s bytes=%zu lines=%ld\n", id, path,
+              bytes, lines);
     const char *outline[] = {"ast-grep", "outline", path,
                              "--color",  "never",   NULL};
-    add_capture(t, "RELATED OUTLINE", run_cmd_capture(outline, 5));
-}
-
-static void add_status_file_contexts(Text *t, char *status) {
-    char *cursor = status;
-    int count = 0;
-    while (*cursor && count < 32) {
-        char *end = strchr(cursor, '\n');
-        if (end)
-            *end = '\0';
-        if (strlen(cursor) > 3)
-            add_file_context(t, cursor + 3, 0);
-        count++;
-        if (!end)
-            break;
-        cursor = end + 1;
-    }
+    add_capture_id(t, "RELATED OUTLINE", id, run_cmd_capture(outline, 5));
 }
 
 static int add_paths(const char *const *paths, int path_count,
@@ -208,7 +332,17 @@ static void add_diff_context(Text *t, int path_count,
                              const char *const *paths) {
     const char *status[] = {"git", "status", "--short", NULL};
     char *status_text = run_cmd_capture_raw(status, 3);
-    add_capture(t, "GIT STATUS", status_text ? copy_text(status_text) : NULL);
+    ContextFiles files = {0};
+    char *status_copy = status_text ? copy_text(status_text) : NULL;
+    if (status_text)
+        collect_status(&files, status_text);
+    for (int i = 0; i < path_count; i++)
+        add_file(&files, paths[i], "  ");
+
+    text_addf(t, "[CONTEXT v1] mode=diff files=%d\n", files.count);
+    add_capture(t, "GIT STATUS", status_copy);
+    add_manifest(t, &files);
+    add_index(t, &files);
 
     const char *stat[256] = {0};
     int n = 0;
@@ -219,10 +353,6 @@ static void add_diff_context(Text *t, int path_count,
     n = add_paths(paths, path_count, stat, n, 256);
     add_capture(t, "DIFF STAT", run_cmd_capture_raw(stat, n));
 
-    const char *names[] = {"git", "status", "--short", NULL};
-    char *name_text = run_cmd_capture(names, 3);
-    add_capture(t, "CHANGED FILES", name_text ? copy_text(name_text) : NULL);
-
     const char *diff[256] = {0};
     n = 0;
     diff[n++] = "git";
@@ -232,44 +362,59 @@ static void add_diff_context(Text *t, int path_count,
     n = add_paths(paths, path_count, diff, n, 256);
     add_capture(t, "EXACT DIFF", run_cmd_capture_raw(diff, n));
 
-    free(name_text);
-    if (status_text) {
-        add_status_file_contexts(t, status_text);
+    for (int i = 0; i < files.count; i++)
+        add_file_context(t, files.path[i], i + 1, 0);
+    if (status_text)
         free(status_text);
-    }
 }
 
 static void add_query_context(Text *t, const char *pattern, const char *path) {
-    text_addf(t, "\n[QUERY] %s path=%s\n", pattern, path);
-    const char *args[] = {"rg",           "-n", "-C",    "3",  "--color=never",
-                          "--no-heading", "--", pattern, path, NULL};
-    add_capture(t, "MATCHES AND REFERENCES", run_cmd_capture_raw(args, 9));
+    ContextFiles files = {0};
     size_t bytes = 0;
     long lines = 0;
-    if (file_stats(path, &bytes, &lines)) {
-        add_file_context(t, path, 1);
+    int is_file = file_stats(path, &bytes, &lines);
+    char *related = NULL;
+    if (is_file) {
+        add_file(&files, path, "  ");
     } else {
-        const char *files[] = {"rg", "-l", "--color=never", "--", pattern,
-                               path, NULL};
-        char *related = run_cmd_capture_raw(files, 6);
+        const char *files_cmd[] = {"rg", "-l", "--color=never", "--", pattern,
+                                   path, NULL};
+        related = run_cmd_capture_raw(files_cmd, 6);
         if (related) {
             char *cursor = related;
-            int count = 0;
-            while (*cursor && count < 32) {
+            while (*cursor && files.count < MAX_CONTEXT_FILES) {
                 char *end = strchr(cursor, '\n');
                 if (end)
                     *end = '\0';
-                if (*cursor) {
-                    add_related_outline(t, cursor);
-                    count++;
-                }
+                add_file(&files, cursor, "  ");
                 if (!end)
                     break;
                 cursor = end + 1;
             }
-            free(related);
         }
     }
+
+    text_addf(t, "[CONTEXT v1] mode=query files=%d pattern=%s path=%s\n",
+              files.count, pattern, path);
+    add_manifest(t, &files);
+    add_index(t, &files);
+    const char *args[] = {"rg",           "-n", "-C",    "8",  "--color=never",
+                          "--no-heading", "--", pattern, path, NULL};
+    add_capture(t, "MATCHES AND REFERENCES", run_cmd_capture_raw(args, 9));
+    if (is_file) {
+        add_file_context(t, path, 1, 1);
+    } else {
+        for (int i = 0; i < files.count; i++) {
+            size_t related_bytes = 0;
+            long related_lines = 0;
+            if (file_stats(files.path[i], &related_bytes, &related_lines) &&
+                related_lines <= 120)
+                add_file_context(t, files.path[i], i + 1, 0);
+            else
+                add_related_outline(t, files.path[i], i + 1);
+        }
+    }
+    free(related);
 }
 
 static void emit_context(Text *t) {
@@ -316,7 +461,12 @@ void cmd_context(int argc, const char *const *argv) {
         if (file_stats(argv[0], &bytes, &lines)) {
             (void)bytes;
             (void)lines;
-            add_file_context(&text, argv[0], 1);
+            ContextFiles files = {0};
+            add_file(&files, argv[0], "  ");
+            text_addf(&text, "[CONTEXT v1] mode=file files=%d\n", files.count);
+            add_manifest(&text, &files);
+            add_index(&text, &files);
+            add_file_context(&text, argv[0], 1, 1);
         } else {
             add_query_context(&text, argv[0], ".");
         }

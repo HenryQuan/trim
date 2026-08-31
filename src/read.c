@@ -94,8 +94,10 @@ void read_lines(const char *path, int start, int end) {
     fclose(f);
     if (!emitted)
         ofmt("[T:%d/%zu]FILE:%s@0", (int)MAX_CHARS, total, path);
-    if (truncated)
-        oadd(" — prefer trim par \"a\" \"b\" ...");
+    if (truncated) {
+        oadd(" — ");
+        oadd(pick_hint_ctx(""));
+    }
     oadd("\n");
     int was_exact = exact_flush;
     exact_flush = 1;

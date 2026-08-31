@@ -17,6 +17,10 @@
 #endif
 
 #define HINT_PAR "prefer trim par \"a\" \"b\" ..."
+#define HINT_CTX                                                               \
+    "prefer trim context — one call for git status, diff, files, "             \
+    "outlines, refs, history; trim context --query <pattern> "                 \
+    "<path> for targeted symbol context"
 #define HINT_RG "capped — try trim outline <file>"
 #define HINT_OUT "capped — try trim rg <pat> <file>"
 
@@ -26,6 +30,7 @@ extern size_t MAX_LINES;
 /* util.c — config + text processing */
 void init_max_chars(void);
 const char *pick_hint(const char *cmd);
+const char *pick_hint_ctx(const char *cmd);
 int is_read(const char *s);
 int is_lines(const char *s);
 void cap(const char *s, int truncated, size_t total_chars, const char *hint);

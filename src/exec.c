@@ -78,7 +78,7 @@ int run_cmd_str(const char *cmd) {
         if (cut == 0)
             cut = MAX_CHARS;
         fwrite(comp, 1, cut, stdout);
-        printf("\n[TRUNCATED:%zu/%zu] %s\n", cut, cn, pick_hint(cmd));
+        printf("\n[TRUNCATED:%zu/%zu] %s\n", cut, cn, pick_hint_ctx(cmd));
     } else {
         fwrite(comp, 1, cn, stdout);
         if (cn && comp[cn - 1] != '\n')

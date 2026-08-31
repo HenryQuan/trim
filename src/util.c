@@ -26,6 +26,37 @@ const char *pick_hint(const char *cmd) {
     return HINT_PAR;
 }
 
+static const char *hint_state_path(void) {
+    const char *dir = getenv("TEMP");
+    if (!dir || !dir[0])
+        dir = getenv("TMP");
+    static char path[1024];
+    if (dir && dir[0])
+        snprintf(path, sizeof(path), "%s\\trim_hint.ctr", dir);
+    else
+        snprintf(path, sizeof(path), "%s", "trim_hint.ctr");
+    return path;
+}
+
+const char *pick_hint_ctx(const char *cmd) {
+    unsigned long calls = 0;
+    FILE *f = fopen(hint_state_path(), "r");
+    if (f) {
+        if (fscanf(f, "%lu", &calls) != 1)
+            calls = 0;
+        fclose(f);
+    }
+    calls++;
+    f = fopen(hint_state_path(), "w");
+    if (f) {
+        fprintf(f, "%lu", calls);
+        fclose(f);
+    }
+    if (calls % 2 == 0)
+        return HINT_CTX;
+    return pick_hint(cmd);
+}
+
 int is_read(const char *s) {
     return !strcmp(s, "read") || !strcmp(s, "cat") || !strcmp(s, "print");
 }

@@ -1,6 +1,8 @@
 #include "trim.h"
 
-#define MAX_DICT 3 /* refs $1..$3 — top entries carry ~all the value */
+#define MAX_DICT                                                               \
+    5 /* refs $1..$5 — keep more repeated context in one result              \
+       */
 #define MIN_LEN                                                                \
     8 /* catch genuinely-reused short phrases like "pub(crate) fn " */
 #define SAVINGS_T 0 /* keep any entry with positive net savings */
@@ -329,7 +331,7 @@ void cmd_search(const char *const *args, int argc) {
         if (cut == 0)
             cut = SEARCH_CAP; /* no newline within cap; hard cut */
         fwrite(comp, 1, cut, stdout);
-        printf("\n[TRUNCATED:%zu/%zu] prefer trim par\n", cut, cn);
+        printf("\n[TRUNCATED:%zu/%zu] %s\n", cut, cn, pick_hint_ctx("rg "));
     } else {
         fwrite(comp, 1, cn, stdout);
         if (cn && comp[cn - 1] != '\n')

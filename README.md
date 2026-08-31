@@ -31,7 +31,7 @@ trim par "cmd1" "cmd2" ...   batch commands into one step — the primary cost s
 trim <command> [args]       run ANY command, output capped
 ```
 
-`trim rg`, `trim sg`, and `trim fd` don't just cap — they **compact**: repeated substrings are factored out into reference refs `$1`..`$3` (lossless), so a search's repeated path text collapses without losing any matches. Example:
+`trim rg`, `trim sg`, and `trim fd` don't just cap — they **compact**: repeated substrings are factored out into reference refs `$1`..`$5` (lossless), so a search's repeated path text collapses without losing any matches. Example:
 
 ```
 $ trim rg -n "fn check_pen" src/armor_viewer/
@@ -106,7 +106,7 @@ trim diff src/file.c                 # inspect the final change
 
 Use `trim outline <file>` when only the function/class map is needed. Use `trim lines`
 for source that will be edited: indentation, blank lines, trailing spaces, and line
-boundaries are preserved. Search and context output may use lossless `$1`..`$3`
+boundaries are preserved. Search and context output may use lossless `$1`..`$5`
 references for repeated content.
 
 ## Benchmark

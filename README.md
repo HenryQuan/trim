@@ -45,10 +45,10 @@ Any command not listed above runs as-is with capped output. `trm` is a shorter a
 
 ```
 TRIM_MAX_CHARS=500 trim rg pattern          # per-command output cap (default 5120)
-TRIM_MAX_LINES=1024 trim lines file 1 40    # range-read line cap (default 512)
+TRIM_MAX_CHARS=8192 trim lines file 1 40    # range-read char cap (default 5120)
 ```
 
-The "do nothing unless it's too big" rule applies everywhere: `trim read` on a small file prints it whole with no ceremony; a large file returns outline + first/last 10 lines + a pointer; `trim lines` returns the exact range untouched and only clamps (at `MAX_LINES`) if the agent asks for something unreasonable like `trim lines file 1 5000`.
+The "do nothing unless it's too big" rule applies everywhere: `trim read` on a small file prints it whole with no ceremony; a large file returns outline + first/last 10 lines + a pointer; `trim lines` returns the exact range untouched and only clamps (at `MAX_CHARS`) if the agent asks for something unreasonable like `trim lines file 1 5000`.
 
 ## Build
 

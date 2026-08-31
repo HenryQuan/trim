@@ -25,8 +25,8 @@ static const char *HELP =
     "  trim blame <file>              git blame (read-only)\n"
     "  trim log [<args>]              git log (read-only)\n"
     "  trim par \"cmd1\" \"cmd2\" ...    batch commands, each output capped\n"
-    "  trim lines honors its range up to MAX_LINES (default 512, env "
-    "TRIM_MAX_LINES);\n"
+    "  trim read/lines output is capped at MAX_CHARS (default 5120, env "
+    "TRIM_MAX_CHARS);\n"
     "  prefer trim lines over trim read/cat/print to avoid whole-file reads.\n";
 
 int main(int argc, char **argv) {

@@ -65,7 +65,7 @@ void read_lines(const char *path, int start, int end) {
 
     char line[4096];
     int lineno = 0, blanks = 0, truncated = 0;
-    size_t emitted = 0;
+    size_t emitted = 0, echars = 0;
     while (fgets(line, sizeof(line), f)) {
         lineno++;
         if (lineno < start)
@@ -94,15 +94,15 @@ void read_lines(const char *path, int start, int end) {
 
         char pre[24];
         snprintf(pre, sizeof(pre), "|%d:", lineno);
-        if (emitted >= MAX_LINES) {
+        if (echars + strlen(pre) + len + 1 > MAX_CHARS) {
             truncated = 1;
             break;
         }
         if (!emitted)
-            ofmt("[T:%d/%zu]FILE:%s@%d", (int)MAX_LINES, total, path, lineno);
+            ofmt("[T:%zu/%zu]FILE:%s@%d", (size_t)MAX_CHARS, total, path, lineno);
         oadd(pre);
         oadd(line);
-        emitted++;
+        echars += strlen(pre) + len + 1, emitted++;
     }
     fclose(f);
     if (!emitted)

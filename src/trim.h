@@ -44,6 +44,8 @@ int run_cmd_str(const char *cmd);
 void run_cmd(const char *const *args, int argc);
 char *run_capture(const char *cmd);
 char *run_cmd_capture(const char *const *args, int argc);
+char *run_capture_raw(const char *cmd);
+char *run_cmd_capture_raw(const char *const *args, int argc);
 void cmd_par(int argc, const char *const *argv);
 
 /* compact.c — lossless token compaction for search output */
@@ -57,5 +59,8 @@ void cmd_outline(int argc, const char *const *argv);
 void cmd_diff(const char *file);
 void cmd_blame(const char *file);
 void cmd_log(int argc, const char *const *argv);
+
+/* context.c — enriched, single-call workspace context */
+void cmd_context(int argc, const char *const *argv);
 
 #endif

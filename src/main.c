@@ -11,12 +11,18 @@ static const char *HELP =
     "report\n"
     "\n"
     "Usage:\n"
+    " trim context [diff|--query <pattern>] [path] enriched one-call context\n"
+    "   context includes status, diff, files, outlines, references, history, "
+    "and source\n"
+    "   start with: trim context; exact edits: trim lines <file> <start> "
+    "<end>\n"
     "  trim <command> [args]          run any command, output capped\n"
     "  trim rg <args>                 run ripgrep\n"
     "  trim sg <args>                 run ast-grep\n"
     "  trim fd <args>                 run fd\n"
-    "  trim lines <file> <start> [<end>]  print lines start..end (l/sed "
-    "aliases; $ = EOF)\n"
+    "  trim lines <file> <start> [<end>]  exact edit-ready lines; spaces "
+    "preserved\n"
+    "    aliases: l/sed; $ = EOF\n"
     "  trim read|cat|print <file>     read whole file with output cap (prefer "
     "trim lines)\n"
     "  trim outline <file>            extract function/class signatures "
@@ -106,6 +112,11 @@ int main(int argc, char **argv) {
             return 1;
         }
         cmd_par(argc - 2, (const char *const *)argv + 2);
+        return 0;
+    }
+
+    if (!strcmp(cmd, "context")) {
+        cmd_context(argc - 2, (const char *const *)argv + 2);
         return 0;
     }
 

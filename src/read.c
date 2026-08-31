@@ -6,6 +6,7 @@
 static char *obuf = NULL;
 static size_t olen = 0, ocap = 0;
 static int defer_flush = 0;
+static int exact_flush = 0;
 
 static void oadd(const char *s) {
     size_t n = strlen(s);
@@ -32,12 +33,15 @@ static void oflush(void) {
     if (!obuf)
         return;
     obuf[olen] = '\0';
-    size_t cn = 0;
-    char *comp = compact_paths(obuf, &cn);
+    size_t cn = olen;
+    char *comp = obuf;
+    if (!exact_flush)
+        comp = compact_paths(obuf, &cn);
     fwrite(comp, 1, cn, stdout);
     if (cn && comp[cn - 1] != '\n')
         fputc('\n', stdout);
-    free(comp);
+    if (comp != obuf)
+        free(comp);
     free(obuf);
     obuf = NULL;
     olen = 0;
@@ -64,7 +68,7 @@ void read_lines(const char *path, int start, int end) {
     rewind(f);
 
     char line[4096];
-    int lineno = 0, blanks = 0, truncated = 0;
+    int lineno = 0, truncated = 0;
     size_t emitted = 0, echars = 0;
     while (fgets(line, sizeof(line), f)) {
         lineno++;
@@ -73,33 +77,16 @@ void read_lines(const char *path, int start, int end) {
         if (end > 0 && lineno > end)
             break;
         size_t len = strlen(line);
-        len = strip_ansi(line, len);
-        len = normalize_newlines(line, len);
-        len = collapse_escapes(line, len);
-        line[len] = '\0';
-        len = lstrip(line);
-        len = collapse_spaces(line, len);
-        if (is_blank_line(line)) {
-            if (blanks >= 1)
-                continue;
-            blanks++;
-        } else {
-            blanks = 0;
-        }
-        if (len && line[len - 1] == '\n')
-            line[--len] = '\0';
-        while (len && (line[len - 1] == ' ' || line[len - 1] == '\t' ||
-                       line[len - 1] == '\r'))
-            line[--len] = '\0';
 
         char pre[24];
-        snprintf(pre, sizeof(pre), "|%d:", lineno);
+        snprintf(pre, sizeof(pre), "%d:", lineno);
         if (echars + strlen(pre) + len + 1 > MAX_CHARS) {
             truncated = 1;
             break;
         }
         if (!emitted)
-            ofmt("[T:%zu/%zu]FILE:%s@%d", (size_t)MAX_CHARS, total, path, lineno);
+            ofmt("[T:%zu/%zu]FILE:%s@%d", (size_t)MAX_CHARS, total, path,
+                 lineno);
         oadd(pre);
         oadd(line);
         echars += strlen(pre) + len + 1, emitted++;
@@ -110,8 +97,11 @@ void read_lines(const char *path, int start, int end) {
     if (truncated)
         oadd(" — prefer trim par \"a\" \"b\" ...");
     oadd("\n");
+    int was_exact = exact_flush;
+    exact_flush = 1;
     if (!defer_flush)
         oflush();
+    exact_flush = was_exact;
 }
 
 /* smart read: small file -> whole content; large file -> outline + first/last

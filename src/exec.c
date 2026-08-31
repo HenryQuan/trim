@@ -67,10 +67,6 @@ int run_cmd_str(const char *cmd) {
     }
     n = strip_ansi(out, n);
     n = normalize_newlines(out, n);
-    n = collapse_blanks(out, n);
-    n = lstrip_lines(out, n);
-    n = collapse_spaces(out, n);
-    n = rtrim_lines(out, n);
     out[n] = '\0';
     /* compact first (lossless), then cap at a line boundary */
     size_t cn = 0;
@@ -124,7 +120,7 @@ void run_cmd(const char *const *args, int argc) {
 }
 
 /* capture a command's full output (no cap), post-processed; caller frees */
-char *run_capture(const char *cmd) {
+static char *capture_command(const char *cmd, int normalize) {
     char buf[4220];
     size_t blen = strlen(cmd);
     if (blen + 6 >= sizeof(buf))
@@ -154,15 +150,17 @@ char *run_capture(const char *cmd) {
     }
     out[n] = '\0';
     pclose(p);
-    n = strip_ansi(out, n);
-    n = normalize_newlines(out, n);
-    n = collapse_blanks(out, n);
-    n = lstrip_lines(out, n);
-    n = collapse_spaces(out, n);
-    n = rtrim_lines(out, n);
+    if (normalize) {
+        n = strip_ansi(out, n);
+        n = normalize_newlines(out, n);
+    }
     out[n] = '\0';
     return out;
 }
+
+char *run_capture(const char *cmd) { return capture_command(cmd, 1); }
+
+char *run_capture_raw(const char *cmd) { return capture_command(cmd, 0); }
 
 char *run_cmd_capture(const char *const *args, int argc) {
     char buf[4096];
@@ -183,6 +181,27 @@ char *run_cmd_capture(const char *const *args, int argc) {
         }
     }
     return run_capture(buf);
+}
+
+char *run_cmd_capture_raw(const char *const *args, int argc) {
+    char buf[4096];
+    int pos = 0;
+    buf[0] = '\0';
+    for (int i = 0; i < argc; i++) {
+        if (i)
+            buf[pos++] = ' ';
+        if (i == 0) {
+            int len = strlen(args[i]);
+            if (pos + len < (int)sizeof(buf)) {
+                memcpy(buf + pos, args[i], (size_t)len);
+                pos += len;
+                buf[pos] = '\0';
+            }
+        } else {
+            append_escaped(buf, &pos, sizeof(buf), args[i]);
+        }
+    }
+    return run_capture_raw(buf);
 }
 
 /* trim par "cmd1" "cmd2" ... — run each command, each output capped separately

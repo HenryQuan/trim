@@ -26,6 +26,7 @@ trim outline <file>         function/class signatures (ast-grep)
 trim diff [<file>]          git diff (read-only)
 trim blame <file>           git blame (read-only)
 trim log [<args>]           git log (read-only)
+trim context                enriched one-call workspace context
 trim par "cmd1" "cmd2" ...   batch commands into one step — the primary cost saver
 trim <command> [args]       run ANY command, output capped
 ```
@@ -52,14 +53,14 @@ The "do nothing unless it's too big" rule applies everywhere: `trim read` on a s
 
 ## Build
 
-The sources are split across `src/` (`main.c`, `util.c`, `exec.c`, `compact.c`, `read.c`, `trim.h`). Builds are strict — every `-Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings -Wstrict-prototypes` warning is fatal (`-Werror`):
+The sources are split across `src/` (`main.c`, `util.c`, `exec.c`, `compact.c`, `read.c`, `context.c`, `trim.h`). Builds are strict — every `-Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings -Wstrict-prototypes` warning is fatal (`-Werror`):
 
 ```sh
 make trim            # Linux/macOS; use `make trim.exe` on Windows (MinGW)
 # or directly:
 gcc -O2 -s -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings \
     -Wstrict-prototypes -Werror -o trim src/main.c src/util.c src/exec.c \
-    src/compact.c src/read.c
+    src/compact.c src/read.c src/context.c
 
 make format          # clang-format all src files (uses .clang-format, 4-space)
 ```
@@ -76,6 +77,37 @@ Pi agent extensions that enforce the same discipline at the tool level:
 | `enforce-ask.ts` | Detects agent self-doubt keywords mid-stream and aborts, forcing it to ask the user |
 
 Without these, the model may fall back to built-in tools like `read` or run `cat`/`rg`/`grep` directly, bypassing the capping. The extensions remove those tools and cap all bash output regardless of command.
+
+## Context
+
+`trim context` is the recommended starting point for an agent. It gathers the relevant
+workspace evidence in one agent-visible call, then compacts the combined result once:
+
+```sh
+trim context              # current Git status, diff, files, outlines, and source
+trim context diff         # the current change set and related file context
+trim context path/to/file # file metadata, outline, diff, history, and source windows
+trim context --query foo src # matches, references, and related file outlines
+```
+
+The bundle includes Git status and diff, changed and untracked files, file metadata,
+outlines, source windows, recent history, matches, references, and related outlines.
+Large results include an explicit `CONTEXT_TRUNCATED` marker so the agent knows when it
+needs a narrower scope.
+
+### Recommended workflow
+
+```sh
+trim context                         # understand the current task/change
+trim context --query "symbol" src    # find definitions, uses, and related files
+trim lines src/file.c 120 180        # exact edit-ready source; preserves whitespace
+trim diff src/file.c                 # inspect the final change
+```
+
+Use `trim outline <file>` when only the function/class map is needed. Use `trim lines`
+for source that will be edited: indentation, blank lines, trailing spaces, and line
+boundaries are preserved. Search and context output may use lossless `$1`..`$3`
+references for repeated content.
 
 ## Benchmark
 

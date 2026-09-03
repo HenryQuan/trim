@@ -50,6 +50,9 @@ export const TrimPlugin: Plugin = async ({ $ }) => {
       if (typeof command !== "string" || !command) return
       const target = command.trim()
       if (!target || /^(?:trim|trm)\s+/.test(target)) return
+      // Skip compound shell statements; prepending trim to these breaks them.
+      if (/^(?:for|while|until|if|case|select|function|time|!|do|done|fi|then|else)\b|^\{|^\(/.test(target))
+        return
 
       ;(args as Record<string, unknown>).command = `trim ${target}`
     },

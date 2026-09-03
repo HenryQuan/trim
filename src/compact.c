@@ -187,8 +187,9 @@ static char *build_body(const char *s, size_t n, char valbuf[][257], int vlen[],
             }
         }
         if (m >= 0) {
-            char ref[12];
-            snprintf(ref, sizeof(ref), "$%d", m + 1);
+            char ref[16];
+            // write ^N^ for the reference (to avoid accidental $N in the body)
+            snprintf(ref, sizeof(ref), "^%d^", m + 1);
             size_t rl = strlen(ref);
             if (on + rl + 2 >= cap) {
                 cap *= 2;
@@ -256,7 +257,7 @@ char *compact_paths(const char *s, size_t *out_n) {
         int bad[MAX_DICT] = {0}, nbad = 0;
         for (int d = 0; d < ndict; d++) {
             char ref[8];
-            snprintf(ref, sizeof(ref), "$%d", d + 1);
+            snprintf(ref, sizeof(ref), "^%d^", d + 1);
             if (count_sub(body, ref) < 2) {
                 bad[d] = 1;
                 nbad++;
@@ -294,7 +295,7 @@ char *compact_paths(const char *s, size_t *out_n) {
     size_t cap = blen + 64 + (size_t)ndict * 300, on = 0;
     char *res = malloc(cap);
     for (int d = 0; d < ndict; d++) {
-        int h = snprintf(res + on, cap - on, "$%d = %.*s\n", d + 1, vlen[d],
+        int h = snprintf(res + on, cap - on, "^%d^ = %.*s\n", d + 1, vlen[d],
                          valbuf[d]);
         on += (size_t)h;
     }

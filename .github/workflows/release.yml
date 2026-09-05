@@ -29,7 +29,13 @@ jobs:
             macOS)   out="trim-macos"   ;;
             Windows) out="trim-windows.exe" ;;
           esac
-          gcc -O2 -s -o "$out" src/main.c src/util.c src/exec.c src/compact.c src/read.c src/context.c
+          gcc -O2 -s -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings \
+              -Wstrict-prototypes -o "$out" \
+              src/main.c src/util.c src/exec.c src/compact.c src/read.c \
+              src/string.c src/keyword.c src/context.c src/ref/ref.c \
+              src/ref/profile.c src/ref/parse.c src/ref/names.c \
+              src/ref/index.c src/ref/engine.c src/ref/rx_compile.c \
+              src/ref/rx_match.c
         shell: bash
 
       - uses: actions/upload-artifact@v4

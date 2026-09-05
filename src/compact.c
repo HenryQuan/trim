@@ -115,6 +115,9 @@ static int find_repeated(const char *s, size_t n, const unsigned char *used,
                  */
                 const char *nlp = memchr(s + p0, '\n', (size_t)minlcp);
                 int Lv = nlp ? (int)(nlp - (s + p0)) : minlcp;
+                while (Lv >= minlen && (s[p0 + Lv - 1] == ' ' ||
+                                        s[p0 + Lv - 1] == '\t'))
+                    Lv--; /* refs must not swallow the inter-word space */
                 if (Lv >= minlen) {
                     int sav = occn * (Lv - 2); /* body savings only; the small
                                                   dict header is not a cost */

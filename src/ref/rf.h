@@ -66,15 +66,29 @@ Callee *rf_find_callee(const char *name);
 int rf_site_def(Site *st);
 int rf_find_def_by_name(const char *name);
 
+/* root matching for fuzzy/regex symbol lookup */
+#define RF_EXACT 0
+#define RF_SUB 1
+#define RF_RE 2
+int rf_name_matches(const char *name, int mode, const char *pat,
+                    const void *re);
+int rf_find_defs_by(const char *pat, int mode, const void *re, int *out,
+                    int max);
+
 /* engine.c — ast-grep runs, small helpers, output */
 int rf_run_kind(const char *kind, const char *lang, const char *path,
                 int want_defs);
+int rf_def_at(const char *file, long line);
 int rf_visited_has(char **visited, int n, const char *s);
 char **rf_push_name(char **arr, int *n, int *cap, const char *s);
 void rf_first_line(const char *text, char *out, size_t cap);
+void rf_emit_capped(Buf *b, const char *tag);
 void rf_emit_ref(Buf *b);
 
 /* profile.c — index one path across all language profiles */
 void rf_scan(const char *path);
+
+/* engine.c — text-level rg fallback when ast-grep indexes are empty */
+void rf_rg_fallback(Buf *out, const char *target, const char *path);
 
 #endif

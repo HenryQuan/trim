@@ -1,6 +1,9 @@
 /* index.c — callee -> call-sites and definition tables */
+#include <ctype.h>
+
 #include "../trim.h"
 #include "rf.h"
+#include "rx.h"
 
 Callee *rf_callees;
 int rf_ncallees, rf_ccallees;
@@ -83,9 +86,53 @@ int rf_site_def(Site *st) {
     return st->defidx;
 }
 
+/* public: smallest def in file containing the 1-based line; -1 when none */
+int rf_def_at(const char *file, long line) { return enclosing_def(file, line); }
+
 int rf_find_def_by_name(const char *name) {
     for (int i = 0; i < rf_ndefs; i++)
         if (!strcmp(rf_defs[i].name, name))
             return i;
     return -1;
+}
+
+/* mode: exact | substring (smartcase — all-lowercase pat ignores case) |
+   tiny regex (re = compiled re_t from rx.h) */
+int rf_name_matches(const char *name, int mode, const char *pat,
+                    const void *re) {
+    int ml;
+    if (mode == RF_RE)
+        return re_matchp((re_t)re, name, &ml) >= 0;
+    if (mode == RF_SUB) {
+        int ci = 1;
+        for (const char *p = pat; *p; p++)
+            if (isupper((unsigned char)*p))
+                ci = 0;
+        if (!ci)
+            return strstr(name, pat) != NULL;
+        for (const char *h = name; *h; h++) {
+            const char *a = h, *b = pat;
+            while (*b &&
+                   tolower((unsigned char)*a) == tolower((unsigned char)*b))
+                a++, b++;
+            if (!*b)
+                return 1;
+        }
+        return 0;
+    }
+    return strcmp(name, pat) == 0;
+}
+
+/* def indices whose name matches; fills out[] up to max, returns total */
+int rf_find_defs_by(const char *pat, int mode, const void *re, int *out,
+                    int max) {
+    int n = 0;
+    for (int i = 0; i < rf_ndefs; i++) {
+        if (!rf_name_matches(rf_defs[i].name, mode, pat, re))
+            continue;
+        if (n < max)
+            out[n] = i;
+        n++;
+    }
+    return n;
 }

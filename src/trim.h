@@ -72,4 +72,7 @@ void cmd_context(int argc, const char *const *argv);
 /* ref.c — call-tree references via ast-grep (+ rg fallback) */
 void cmd_ref(int argc, const char *const *argv);
 
+/* string.c — string -> bound key -> translations + call sites (+ rg) */
+void cmd_string(int argc, const char *const *argv);
+
 #endif

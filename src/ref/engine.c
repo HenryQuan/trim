@@ -77,8 +77,30 @@ void rf_first_line(const char *text, char *out, size_t cap) {
             *t = ' ';
 }
 
-/* emit through the shared lossless compaction, like context/read */
-void rf_emit_ref(Buf *b) {
+/* text-level rg fallback when ast-grep is missing or nothing indexed */
+void rf_rg_fallback(Buf *out, const char *target, const char *path) {
+    rf_buf_add(out, "ast-grep indexes empty — rg fallback (text-level):\n");
+    const char *args[10];
+    int ac = 0;
+    args[ac++] = "rg";
+    args[ac++] = "-n";
+    args[ac++] = "--color=never";
+    args[ac++] = "--no-heading";
+    args[ac++] = "--fixed-strings";
+    args[ac++] = target;
+    args[ac++] = "--";
+    args[ac++] = path;
+    char *raw = run_cmd_capture_raw(args, ac);
+    if (raw)
+        rf_buf_add(out, raw);
+    else
+        rf_buf_add(out, "no matches\n");
+    free(raw);
+}
+
+/* emit through the shared lossless compaction, like context/read;
+   tag names the feature in the truncation notice */
+void rf_emit_capped(Buf *b, const char *tag) {
     if (!b->data)
         return;
     size_t compact_n = b->len;
@@ -96,11 +118,13 @@ void rf_emit_ref(Buf *b) {
         if (cut == 0)
             cut = MAX_CHARS;
         fwrite(compact, 1, cut, stdout);
-        printf("[REF_TRUNCATED:%zu/%zuc] narrow path or raise TRIM_MAX_CHARS\n",
-               cut, compact_n);
+        printf("[%s_TRUNCATED:%zu/%zuc] narrow path or raise TRIM_MAX_CHARS\n",
+               tag, cut, compact_n);
     }
     if (compact != b->data)
         free(compact);
     free(b->data);
     b->data = NULL;
 }
+
+void rf_emit_ref(Buf *b) { rf_emit_capped(b, "REF"); }

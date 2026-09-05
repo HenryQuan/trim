@@ -23,6 +23,8 @@ trim fd <args>              run fd (path-compacted)
 trim read|cat|print <file>  smart read (small → whole; large → outline + first/last 10 + hint)
 trim lines <file> <s> [<e>] exact lines s..e ($ = EOF)
 trim outline <file>         function/class signatures (ast-grep)
+trim ref <symbol> [path] [--depth N]
+                            syntax call tree: callees + callers by file/function/line (ast-grep)
 trim diff [<file>]          git diff (read-only)
 trim blame <file>           git blame (read-only)
 trim log [<args>]           git log (read-only)
@@ -47,20 +49,46 @@ Any command not listed above runs as-is with capped output. `trm` is a shorter a
 ```
 TRIM_MAX_CHARS=500 trim rg pattern          # per-command output cap (default 5120)
 TRIM_MAX_CHARS=8192 trim lines file 1 40    # range-read char cap (default 5120)
+TRIM_HUMAN=1 trim rg pattern                # disable compaction globally (raw output)
 ```
 
 The "do nothing unless it's too big" rule applies everywhere: `trim read` on a small file prints it whole with no ceremony; a large file returns outline + first/last 10 lines + a pointer; `trim lines` returns the exact range untouched and only clamps (at `MAX_CHARS`) if the agent asks for something unreasonable like `trim lines file 1 5000`.
 
+## Call tree
+
+`trim ref <symbol> [path] [--depth N]` answers both "what does this call?" and "what calls this?" in one step:
+
+```
+$ trim ref _getAnimeList lib/
+CALLS OUT
+_getAnimeList
+  lib/core/GlobalData.dart:390  downloadHTML  |  parser.downloadHTML()
+  lib/core/GlobalData.dart:393  parseHTML    |  parser.parseHTML(doc)
+CALLED BY
+_getAnimeList
+  lib/core/GlobalData.dart:328  init  |  _getAnimeList()
+```
+
+Each section is traversed breadth-first to `--depth` (default 2, max 8), so one call walks the neighborhood of a symbol — a callee's callees, a caller's callers. The engine is `src/ref/`: one `ast-grep run --kind <callKind> -l <lang>` pass per language profile (18 languages, kinds verified against ast-grep 0.45) builds a callee → call-sites index, and `--kind <defKind>` passes locate enclosing definitions by line span. Output flows through the same compaction as search results; when ast-grep is missing or nothing matches, it falls back to plain `rg`.
+
+Resolution is syntax-level, by name: no type system, so same-named functions merge (narrow `path` to the suspect directory to disambiguate). `TRIM_REF_DEBUG=1` logs every ast-grep pass to stderr. Root matching has two fuzzy modes — traversal edges stay exact, only the starting roots are fuzzy, and every match becomes a section:
+
+```
+trim ref HistoryGroup lib/ --sub     # substring roots, smartcase (all-lowercase = case-insensitive)
+trim ref '^_?get[A-Z]' lib/ --re     # regex roots (tiny built-in engine: ^ $ . * + ? [a-z] \d \w \s)
+```
+
 ## Build
 
-The sources are split across `src/` (`main.c`, `util.c`, `exec.c`, `compact.c`, `read.c`, `context.c`, `trim.h`). Builds are strict — every `-Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings -Wstrict-prototypes` warning is fatal (`-Werror`):
+The sources are split across `src/` (`main.c`, `util.c`, `exec.c`, `compact.c`, `read.c`, `string.c`, `context.c`, `trim.h`) with the call-tree engine in `src/ref/` (`rf.h` + eight translation units, each under 200 lines; `rx_*` is a vendored public-domain tiny regex engine). Builds are strict — every `-Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings -Wstrict-prototypes` warning is fatal (`-Werror`):
 
 ```sh
 make trim            # Linux/macOS; use `make trim.exe` on Windows (MinGW)
 # or directly:
 gcc -O2 -s -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings \
     -Wstrict-prototypes -Werror -o trim src/main.c src/util.c src/exec.c \
-    src/compact.c src/read.c src/context.c
+    src/compact.c src/read.c src/context.c src/ref/ref.c src/ref/profile.c \
+    src/ref/parse.c src/ref/names.c src/ref/index.c src/ref/engine.c
 
 make format          # clang-format all src files (uses .clang-format, 4-space)
 ```

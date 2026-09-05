@@ -1,5 +1,9 @@
 #include "trim.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 int _CRT_glob = 0;
 
 static const char *HELP =
@@ -30,6 +34,10 @@ static const char *HELP =
     "  trim ref <symbol> [path] [--depth N]\n"
     "                                 call-tree: callees + callers of symbol "
     "by file, function, line (ast-grep)\n"
+    "  trim string <text> [path]      string -> bound i18n key -> "
+    "translations + call sites with\n"
+    "                                 enclosing functions; key optional, "
+    "input may be a key (rg)\n"
     "  trim diff [<file>]             git diff (read-only)\n"
     "  trim blame <file>              git blame (read-only)\n"
     "  trim log [<args>]              git log (read-only)\n"
@@ -41,6 +49,7 @@ static const char *HELP =
 int main(int argc, char **argv) {
     init_max_chars();
 #ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
     if (argc < 2 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
@@ -125,6 +134,11 @@ int main(int argc, char **argv) {
 
     if (!strcmp(cmd, "ref")) {
         cmd_ref(argc - 2, (const char *const *)argv + 2);
+        return 0;
+    }
+
+    if (!strcmp(cmd, "string")) {
+        cmd_string(argc - 2, (const char *const *)argv + 2);
         return 0;
     }
 

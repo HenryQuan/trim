@@ -4,6 +4,7 @@
 #ifndef REF_RF_H
 #define REF_RF_H
 
+#include "../trim.h"
 #include <stddef.h>
 
 /* language profile: one ast-grep pass set per language */
@@ -46,7 +47,7 @@ typedef struct {
 char *rf_sdup(const char *s);
 void rf_buf_addn(Buf *b, const char *s, size_t n);
 void rf_buf_add(Buf *b, const char *s);
-void rf_buf_addf(Buf *b, const char *fmt, ...);
+void rf_buf_addf(Buf *b, const char *fmt, ...) TRIM_PRINTF(2, 3);
 GrepHit *rf_parse_hits(const char *json, int *out_n);
 
 /* names.c -- identifier extraction from node text */
@@ -78,6 +79,8 @@ int rf_find_defs_by(const char *pat, int mode, const void *re, int *out,
 /* engine.c -- ast-grep runs, small helpers, output */
 int rf_run_kind(const char *kind, const char *lang, const char *path,
                 int want_defs);
+int rf_run_kind_paths(const char *kind, const char *lang,
+                      const char *const *paths, int npaths, int want_defs);
 int rf_def_at(const char *file, long line);
 int rf_visited_has(char **visited, int n, const char *s);
 char **rf_push_name(char **arr, int *n, int *cap, const char *s);
@@ -87,6 +90,7 @@ void rf_emit_ref(Buf *b);
 
 /* profile.c -- index one path across all language profiles */
 void rf_scan(const char *path);
+void rf_scan_defs(const char **files, int nfiles);
 
 /* engine.c -- text-level rg fallback when ast-grep indexes are empty */
 void rf_rg_fallback(Buf *out, const char *target, const char *path);

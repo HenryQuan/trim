@@ -140,13 +140,15 @@ static char *capture_command(const char *cmd, int normalize) {
         pclose(p);
         return NULL;
     }
-    int ch;
-    while ((ch = fgetc(p)) != EOF) {
-        if (n + 2 >= cap) {
+    for (;;) {
+        if (n + 1 >= cap) {
             cap *= 2;
             out = realloc(out, cap);
         }
-        out[n++] = (char)ch;
+        size_t got = fread(out + n, 1, cap - n - 1, p);
+        n += got;
+        if (!got)
+            break;
     }
     out[n] = '\0';
     pclose(p);

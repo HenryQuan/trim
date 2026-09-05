@@ -506,12 +506,13 @@ void cmd_string(int argc, const char *const *argv) {
     }
     rf_buf_add(&out, "4 CALL SITES\n");
     int ncall = 0;
-    int need_defs = 0;
+    const char **files = malloc((size_t)s_n * sizeof(*files));
+    int nfiles = 0;
     for (int i = 0; i < s_n; i++)
         if (s_hits[i].key)
-            need_defs = 1;
-    if (need_defs)
-        rf_scan(path); /* index defs once for enclosing-function lookup */
+            files[nfiles++] = s_hits[i].file;
+    rf_scan_defs(files, nfiles);
+    free(files);
     if (dbg)
         fprintf(stderr, "[sdbg] D scanned ndefs=%d ncallees=%d\n", rf_ndefs,
                 rf_ncallees);

@@ -6,7 +6,12 @@
    returns hit count (0 = kind produced nothing) */
 int rf_run_kind(const char *kind, const char *lang, const char *path,
                 int want_defs) {
-    const char *args[12];
+    return rf_run_kind_paths(kind, lang, &path, 1, want_defs);
+}
+
+int rf_run_kind_paths(const char *kind, const char *lang,
+                      const char *const *paths, int npaths, int want_defs) {
+    const char **args = malloc((size_t)(8 + npaths) * sizeof(*args));
     int argc = 0;
     args[argc++] = "ast-grep";
     args[argc++] = "run";
@@ -16,8 +21,10 @@ int rf_run_kind(const char *kind, const char *lang, const char *path,
     args[argc++] = lang;
     args[argc++] = "--json=compact";
     args[argc++] = "--";
-    args[argc++] = path;
+    for (int i = 0; i < npaths; i++)
+        args[argc++] = paths[i];
     char *json = run_cmd_capture_raw(args, argc);
+    free(args);
     if (getenv("TRIM_REF_DEBUG") && json)
         fprintf(stderr, "[ref-debug] kind=%s lang=%s len=%zu head=%.120s\n",
                 kind, lang, strlen(json), json);

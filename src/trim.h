@@ -6,6 +6,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#ifdef __MINGW_PRINTF_FORMAT
+#define TRIM_PRINTF(fmt, args)                                                 \
+    __attribute__((format(__MINGW_PRINTF_FORMAT, fmt, args)))
+#else
+#define TRIM_PRINTF(fmt, args) __attribute__((format(__printf__, fmt, args)))
+#endif
+#else
+#define TRIM_PRINTF(fmt, args)
+#endif
+
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>

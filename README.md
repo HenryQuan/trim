@@ -101,7 +101,7 @@ _getAnimeList
   lib/core/GlobalData.dart:328  init  |  _getAnimeList()
 ```
 
-Each section is traversed breadth-first to `--depth` (default 2, max 8), so one call walks the neighborhood of a symbol — a callee's callees, a caller's callers. The engine is `src/ref/`: one `ast-grep run --kind` pass per language profile (18 languages) builds a callee → call-sites index; when ast-grep is missing or nothing matches, it falls back to plain `rg`.
+Each section is traversed breadth-first to `--depth` (default 2, max 8), so one call walks the neighborhood of a symbol — a callee's callees, a caller's callers. The engine is `src/ref/`: a single file listing routes `ast-grep run --kind` scans to language profiles whose extensions are present, then call and definition passes build the index. If language discovery is unavailable or inconclusive, it probes all 18 profiles; when ast-grep is missing or nothing matches, `ref` falls back to plain `rg`.
 
 Resolution is syntax-level, by name: no type system, so same-named functions merge (narrow `path` to disambiguate). Root matching has two fuzzy modes — traversal edges stay exact, only the starting roots are fuzzy:
 
@@ -150,6 +150,11 @@ CALLERS
 ```
 
 Seeds come from the same index as `trim ref` plus an `rg -i` pass over string literals (resolved through the same binders as `trim string`). Output is capped like every other command — narrow the keywords or raise `TRIM_MAX_CHARS` when the seed list floods.
+
+`string` indexes only definitions in files containing key references, grouped by
+language and batched with duplicate paths removed. It does not build a call
+graph. `keyword` and `ref` retain the project-wide graph needed for callers,
+but skip absent language profiles. No persistent index or cache is required.
 
 ### Context
 

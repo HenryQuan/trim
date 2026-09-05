@@ -124,12 +124,10 @@ GrepHit *rf_parse_hits(const char *json, int *out_n) {
         const char *obj = p;
         p += sizeof(OBJ) - 1;
         const char *nobj = strstr(p, "{\"text\":\"");
-        const char *meta = strstr(p, "\"metaVariables\"");
-        const char *objEnd = nobj;
-        if (meta && (!objEnd || meta < objEnd))
-            objEnd = meta;
-        if (!objEnd)
-            objEnd = p + strlen(p);
+        const char *objEnd = nobj ? nobj : p + strlen(p);
+        const char *meta = find_key(p, objEnd, "\"metaVariables\"");
+        if (meta)
+            objEnd = meta - strlen("\"metaVariables\"");
         GrepHit h = {0};
         h.text = json_unescape(p, NULL);
         const char *k = find_key(obj, objEnd, "\"start\":{\"line\":");

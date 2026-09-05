@@ -20,6 +20,8 @@ static void oadd(const char *s) {
     olen += n;
 }
 
+static void ofmt(const char *fmt, ...) TRIM_PRINTF(1, 2);
+
 static void ofmt(const char *fmt, ...) {
     char tmp[512];
     va_list ap;

@@ -41,6 +41,15 @@ trim keyword <kw...> [path] [--depth N]
 
 `trm` is a shorter alias. Any command not listed above runs as-is with capped output.
 
+External tools each command shells out to (everything else is built in — `lines`, `par`, and the generic cap need none):
+
+| needs | commands |
+|-------|----------|
+| `rg` | `rg`, `string`, `keyword` (references + string literals), `ref` (fallback), `context` |
+| `ast-grep` | `sg`, `outline`, `read` (large-file outlines), `context` (outlines); `ref`/`keyword` use it for the syntax index and degrade to text-level `rg` without it |
+| `git` | `diff`, `blame`, `log`, `context` |
+| `fd` | `fd` |
+
 ### Search compaction
 
 `trim rg`/`sg`/`fd` don't just cap — they compact: repeated substrings are factored into lossless refs `$1`..`$5`, so all matches fit in one call with no follow-up queries:

@@ -2,9 +2,80 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <io.h>
+#include <fcntl.h>
+#else
+#include <unistd.h>
+#include <fcntl.h>
 #endif
 
 int _CRT_glob = 0;
+
+/* man-style paging: only when stdout is a real terminal. agents capture
+   output through pipes, so they keep the capped raw behavior unchanged. */
+static FILE *pager_fp;
+
+static void close_pager(void) {
+    if (!pager_fp)
+        return;
+    fflush(stdout);
+    /* fd 1 must stop referencing the pipe or the pager never sees EOF and
+       _pclose deadlocks; point it at a bit bucket, then close the stream */
+#ifdef _WIN32
+    int nul = _open("NUL", _O_WRONLY);
+    if (nul >= 0) {
+        _dup2(nul, 1);
+        _close(nul);
+    } else {
+        _close(1);
+    }
+    _pclose(pager_fp);
+#else
+    int nul = open("/dev/null", O_WRONLY);
+    if (nul >= 0) {
+        dup2(nul, 1);
+        close(nul);
+    } else {
+        close(1);
+    }
+    pclose(pager_fp);
+#endif
+    pager_fp = NULL;
+}
+
+static void setup_pager(void) {
+#ifdef _WIN32
+    if (!_isatty(_fileno(stdout)))
+        return;
+#else
+    if (!isatty(fileno(stdout)))
+        return;
+#endif
+    if (getenv("TRIM_NO_PAGER"))
+        return;
+    const char *pg = getenv("TRIM_PAGER");
+    if (!pg || !*pg)
+        pg = getenv("PAGER");
+    if (!pg || !*pg)
+        pg = "more";
+#ifdef _WIN32
+    pager_fp = _popen(pg, "w");
+#else
+    pager_fp = popen(pg, "w");
+#endif
+    if (!pager_fp)
+        return;
+#ifdef _WIN32
+    _dup2(_fileno(pager_fp), 1);
+#else
+    dup2(fileno(pager_fp), 1);
+#endif
+    atexit(close_pager);
+    /* human at a terminal: print everything, no compaction */
+    MAX_CHARS = (size_t)1 << 30;
+    MAX_LINES = 1 << 20;
+    HUMAN = 1;
+}
 
 static const char *HELP =
     "trim: capped-output wrapper around any command\n"
@@ -46,12 +117,26 @@ static const char *HELP =
     "  trim blame <file>              git blame (read-only)\n"
     "  trim log [<args>]              git log (read-only)\n"
     "  trim par \"cmd1\" \"cmd2\" ...    batch commands, each output capped\n"
+    "\n"
+    "Best flow (fewest steps):\n"
+    " 1. trim context                  start here - workspace in one call\n"
+    " 2. trim keyword <kw...> [path]  fuzzy recall: symbols/strings by "
+    "meaning\n"
+    " 3. trim ref <symbol> [path]     expand a known symbol: callees + "
+    "callers\n"
+    " 4. trim string <text> [path]    trace visible UI text -> key -> call "
+    "sites\n"
+    " 5. trim lines <file> <s> <e>    edit-ready source for the change\n"
+    " 6. trim diff                    verify the change; batch independent\n"
+    "                                 lookups with trim par in one step\n"
+    "\n"
     "  trim read/lines output is capped at MAX_CHARS (default 5120, env "
     "TRIM_MAX_CHARS);\n"
     "  prefer trim lines over trim read/cat/print to avoid whole-file reads.\n";
 
 int main(int argc, char **argv) {
     init_max_chars();
+    setup_pager();
 #ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
     _setmode(_fileno(stdout), _O_BINARY);

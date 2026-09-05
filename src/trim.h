@@ -75,4 +75,24 @@ void cmd_ref(int argc, const char *const *argv);
 /* string.c — string -> bound key -> translations + call sites (+ rg) */
 void cmd_string(int argc, const char *const *argv);
 
+/* string.c — binding resolvers + rg helpers shared with keyword.c */
+extern const char *const RES_GLOBS[9];
+extern const char *const CODE_GLOBS[12];
+char *argv_to_utf8(const char *s);
+int is_resource(const char *path);
+void trim_content(const char *content);
+int parse_rg_line(const char *s, char *file, size_t fcap, long *line,
+                  const char **content);
+char *extract_key(const char *content, const char *needle);
+char *ident_before(const char *b, const char *cut);
+char *define_key(const char *s);
+char *bind_key(const char *s, const char *needle);
+char *code_key(const char *file, long line, const char *content,
+               const char *needle);
+char *run_rg(const char *pattern, const char *path, int words,
+             const char *const *globs, int nglobs);
+
+/* keyword.c — fuzzy keyword -> symbols/strings -> refs + callers (xref) */
+void cmd_keyword(int argc, const char *const *argv);
+
 #endif

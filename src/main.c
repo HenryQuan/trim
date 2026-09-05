@@ -38,6 +38,10 @@ static const char *HELP =
     "translations + call sites with\n"
     "                                 enclosing functions; key optional, "
     "input may be a key (rg)\n"
+    "  trim keyword <kw...> [path]    fuzzy keywords -> symbols + "
+    "string-bound identifiers ->\n"
+    "                                 references -> callers (xref, "
+    "--depth N)\n"
     "  trim diff [<file>]             git diff (read-only)\n"
     "  trim blame <file>              git blame (read-only)\n"
     "  trim log [<args>]              git log (read-only)\n"
@@ -139,6 +143,11 @@ int main(int argc, char **argv) {
 
     if (!strcmp(cmd, "string")) {
         cmd_string(argc - 2, (const char *const *)argv + 2);
+        return 0;
+    }
+
+    if (!strcmp(cmd, "keyword")) {
+        cmd_keyword(argc - 2, (const char *const *)argv + 2);
         return 0;
     }
 

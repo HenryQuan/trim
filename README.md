@@ -1,39 +1,49 @@
 # trim
 
-A capped-output wrapper around any command, built for coding agents rather than humans.
+A capped-output wrapper around any command — a context-discipline layer for coding agents, with xref commands (`context`, `ref`, `string`, `keyword`) that serve humans and agents alike.
 
 ## Why
 
-`trim` caps each command's output so the context window stays lean over long agent runs. A human developer doesn't read an entire file before fixing a bug — a coding agent shouldn't either.
+Vanilla tooling is amazing. For most interactive work, plain `rg`, `cat`, and direct shell are the right choice — don't add a wrapper you don't need.
 
-**Naive capping is not free.** Simply truncating each command's output lowers per-step tokens but pushes the agent to issue more, smaller calls — more steps means more round-trips and cache re-reads, which can end up slower and pricier than reading whole. So the win isn't the cap; it's **how** trim limits output.
-
-**The design that works: compact search, smart read, cap as a safety net.** `trim rg`/`fd`/`sg` compress the repeated path root into `$1` and show *all* matches in one call (no follow-up queries), and smart `trim read` collapses large files to outline + first/last 10 lines. That cuts fresh tokens *and* steps at the same time — see the [benchmark](#benchmark): trim now beats vanilla on steps, time, cost, and tokens at equal accuracy.
-
-**The core concept is fewer steps, not smaller steps.** Cutting cost per step while increasing step count still raises total cost, because extra round-trips and cache reads outweigh the fresh-token saving. Compaction achieves both at once: less output per call without forcing more calls.
-
-If you need unrestricted browsing, run commands directly. This tool is for coding agents.
+`trim` is for a narrow case: long agent sessions where the context window is the bottleneck. A human doesn't read an entire file before fixing a bug — an agent shouldn't either. Naive capping backfires there: it forces more, smaller calls, and the extra steps cost more than the saved tokens. So trim compacts instead — search results are factored losslessly and reads collapse to outlines — cutting fresh tokens *and* step count at once (see [Benchmark](#benchmark)).
 
 ## Usage
 
+Two layers:
+
+**Compaction layer** — agent context discipline; every output is capped and losslessly compacted:
+
 ```
-trim rg <args>              run ripgrep (path-compacted)
-trim sg <args>              run ast-grep (path-compacted)
-trim fd <args>              run fd (path-compacted)
-trim read|cat|print <file>  smart read (small → whole; large → outline + first/last 10 + hint)
-trim lines <file> <s> [<e>] exact lines s..e ($ = EOF)
-trim outline <file>         function/class signatures (ast-grep)
-trim ref <symbol> [path] [--depth N]
-                            syntax call tree: callees + callers by file/function/line (ast-grep)
-trim diff [<file>]          git diff (read-only)
-trim blame <file>           git blame (read-only)
-trim log [<args>]           git log (read-only)
-trim context                enriched one-call workspace context
-trim par "cmd1" "cmd2" ...   batch commands into one step — the primary cost saver
-trim <command> [args]       run ANY command, output capped
+trim rg <args>                    run ripgrep (path-compacted)
+trim sg <args>                    run ast-grep (path-compacted)
+trim fd <args>                    run fd (path-compacted)
+trim read|cat|print <file>        smart read (small → whole; large → outline + first/last 10 + hint)
+trim lines <file> <s> [<e>]       exact lines s..e, edit-ready ($ = EOF)
+trim outline <file>               function/class signatures (ast-grep)
+trim diff [<file>]                git diff (read-only)
+trim blame <file>                 git blame (read-only)
+trim log [<args>]                 git log (read-only)
+trim par "cmd1" "cmd2" ...        batch commands into one step — the primary cost saver
+trim <command> [args]             run ANY command, output capped
 ```
 
-`trim rg`, `trim sg`, and `trim fd` don't just cap — they **compact**: repeated substrings are factored out into reference refs `$1`..`$5` (lossless), so a search's repeated path text collapses without losing any matches. Example:
+**Xref layer** — fewer steps, more info: each command answers a real question in one call and returns dense related info only (no raw dumps). Built for human and agent use alike:
+
+```
+trim context                      one-call workspace context (status, diff, files, outlines, history)
+trim ref <symbol> [path] [--depth N]
+                                  syntax call tree: callees + callers by file/function/line
+trim string <text> [path]         string -> bound key -> translations + call sites
+trim keyword <kw...> [path] [--depth N]
+                                  fuzzy keywords -> symbols + string-bound ids -> refs + callers
+```
+
+`trm` is a shorter alias. Any command not listed above runs as-is with capped output.
+
+### Search compaction
+
+`trim rg`/`sg`/`fd` don't just cap — they compact: repeated substrings are factored into lossless refs `$1`..`$5`, so all matches fit in one call with no follow-up queries:
 
 ```
 $ trim rg -n "fn check_pen" src/armor_viewer/
@@ -42,19 +52,26 @@ $1penetration.rs:42:pub fn check_penetration(...)
 $1common.rs:457:pub(crate) fn simulate_ap_shell(...)
 ```
 
-The same compaction applies to `fd` (file lists) and `ast-grep` (structured matches). Capping remains only as a high safety net (8 KB) so a genuinely huge result still can't blow the window. The more matches share path prefixes, the bigger the win — rg/fd output can collapse by an order of magnitude or more.
+Capping remains only as a safety net so a genuinely huge result can't blow the window.
 
-Any command not listed above runs as-is with capped output. `trm` is a shorter alias for `trim`.
-
-```
-TRIM_MAX_CHARS=500 trim rg pattern          # per-command output cap (default 5120)
-TRIM_MAX_CHARS=8192 trim lines file 1 40    # range-read char cap (default 5120)
-TRIM_HUMAN=1 trim rg pattern                # disable compaction globally (raw output)
+```sh
+TRIM_MAX_CHARS=500 trim rg pattern     # per-command output cap (default 5120)
+TRIM_HUMAN=1 trim rg pattern           # disable compaction globally (raw output)
 ```
 
-The "do nothing unless it's too big" rule applies everywhere: `trim read` on a small file prints it whole with no ceremony; a large file returns outline + first/last 10 lines + a pointer; `trim lines` returns the exact range untouched and only clamps (at `MAX_CHARS`) if the agent asks for something unreasonable like `trim lines file 1 5000`.
+### Reading files
 
-## Call tree
+Smart `trim read` turns an accidental read of a giant file into a rounding error — a 1.5 MB file collapses to an outline plus first/last lines:
+
+```
+$ trim read task05/sympy/.../test_trinomials.py
+    32: def test_1()   1789: def test_2()   2104: def test_3() ...
+    [LARGE 3200 lines] use trim lines <file> <start> <end> to read a range
+```
+
+`trim lines` returns the exact range untouched — indentation, blank lines, trailing spaces, and line boundaries are preserved — use it for source you will edit. `trim outline` when only the function/class map is needed.
+
+### Call tree
 
 `trim ref <symbol> [path] [--depth N]` answers both "what does this call?" and "what calls this?" in one step:
 
@@ -69,134 +86,88 @@ _getAnimeList
   lib/core/GlobalData.dart:328  init  |  _getAnimeList()
 ```
 
-Each section is traversed breadth-first to `--depth` (default 2, max 8), so one call walks the neighborhood of a symbol — a callee's callees, a caller's callers. The engine is `src/ref/`: one `ast-grep run --kind <callKind> -l <lang>` pass per language profile (18 languages, kinds verified against ast-grep 0.45) builds a callee → call-sites index, and `--kind <defKind>` passes locate enclosing definitions by line span. Output flows through the same compaction as search results; when ast-grep is missing or nothing matches, it falls back to plain `rg`.
+Each section is traversed breadth-first to `--depth` (default 2, max 8), so one call walks the neighborhood of a symbol — a callee's callees, a caller's callers. The engine is `src/ref/`: one `ast-grep run --kind` pass per language profile (18 languages) builds a callee → call-sites index; when ast-grep is missing or nothing matches, it falls back to plain `rg`.
 
-Resolution is syntax-level, by name: no type system, so same-named functions merge (narrow `path` to the suspect directory to disambiguate). `TRIM_REF_DEBUG=1` logs every ast-grep pass to stderr. Root matching has two fuzzy modes — traversal edges stay exact, only the starting roots are fuzzy, and every match becomes a section:
+Resolution is syntax-level, by name: no type system, so same-named functions merge (narrow `path` to disambiguate). Root matching has two fuzzy modes — traversal edges stay exact, only the starting roots are fuzzy:
 
 ```
 trim ref HistoryGroup lib/ --sub     # substring roots, smartcase (all-lowercase = case-insensitive)
 trim ref '^_?get[A-Z]' lib/ --re     # regex roots (tiny built-in engine: ^ $ . * + ? [a-z] \d \w \s)
 ```
 
-## Build
+### String & keyword xref
 
-The sources are split across `src/` (`main.c`, `util.c`, `exec.c`, `compact.c`, `read.c`, `string.c`, `context.c`, `trim.h`) with the call-tree engine in `src/ref/` (`rf.h` + eight translation units, each under 200 lines; `rx_*` is a vendored public-domain tiny regex engine). Builds are strict — every `-Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings -Wstrict-prototypes` warning is fatal (`-Werror`):
+`trim string <text> [path]` is string → xref: find the UI string, resolve the identifier bound to it, then report translations and every code reference with its enclosing function. Bindings are resolved from i18n resources (`.arb`, `.json`, `.yaml`, `.xml`, `.strings`, `.properties`, `.po`, `.resx`), C/C++ `#define` (including `\` continuations), and same-line constants — `IDENT = "lit"`, `IDENT : type = "lit"` — in C++, Rust, Zig, Kotlin, Swift, Dart/Flutter, Go, JS/TS, Python. Passing the key itself works too:
 
-```sh
-make trim            # Linux/macOS; use `make trim.exe` on Windows (MinGW)
-# or directly:
-gcc -O2 -s -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings \
-    -Wstrict-prototypes -Werror -o trim src/main.c src/util.c src/exec.c \
-    src/compact.c src/read.c src/context.c src/ref/ref.c src/ref/profile.c \
-    src/ref/parse.c src/ref/names.c src/ref/index.c src/ref/engine.c
-
-make format          # clang-format all src files (uses .clang-format, 4-space)
+```
+$ trim string "prefer trim context"
+1 LITERAL
+  src/trim.h:21:    "prefer trim context — one call for git status, diff, files, "
+2 KEY
+  HINT_CTX
+3 TRANSLATIONS
+  (none)
+4 CALL SITES
+  src/util.c:59  pick_hint_ctx  |  return HINT_CTX;
+  src/trim.h:20  ?  |  #define HINT_CTX
 ```
 
-## PI
+`trim keyword <kw...> [path] [--depth N]` starts from fuzzy memory instead: keywords match any symbol or string-bound identifier, seeds are ranked by how many keywords they hit, then every reference is annotated with its enclosing function and callers are walked up the call graph (BFS to `--depth`, default 2, max 8; up to 12 keywords; the last positional arg is the path only if it exists on disk). "load anime list" finds `_getAnimeList` even though it contains neither keyword `load` nor a literal `load anime list`:
 
-Pi agent extensions that enforce the same discipline at the tool level:
-
-| File | Purpose |
-|------|---------|
-| `enforce-trm.ts` | Auto-prefixes `trim ` to every bash command that doesn't start with it |
-| `bash-cap.ts` | Caps ALL bash output at `TRIM_MAX_CHARS`, same format as `trim` |
-| `APPEND_SYSTEM.md` | Appends trim rules to the system prompt as a text-level reminder |
-| `enforce-ask.ts` | Detects agent self-doubt keywords mid-stream and aborts, forcing it to ask the user |
-
-Without these, the model may fall back to built-in tools like `read` or run `cat`/`rg`/`grep` directly, bypassing the capping. The extensions remove those tools and cap all bash output regardless of command.
-
-## Context
-
-`trim context` is the recommended starting point for an agent. It gathers the relevant
-workspace evidence in one agent-visible call, then compacts the combined result once:
-
-```sh
-trim context              # current Git status, diff, files, outlines, and source
-trim context diff         # the current change set and related file context
-trim context path/to/file # file metadata, outline, diff, history, and source windows
-trim context --query foo src # matches, references, and related file outlines
+```
+$ trim keyword load anime list animeone/lib
+[KEYWORD v1] kws=load,anime,list path=animeone/lib depth=2
+SEEDS
+  AnimeList      (2/3 kws)
+  _getAnimeList  (2/3 kws)  lib/core/GlobalData.dart:388
+  getAnimeList   (2/3 kws)  lib/core/GlobalData.dart:186
+  ...
+REFERENCES
+  _getAnimeList
+  lib/core/GlobalData.dart:328  init  |  await _getAnimeList();
+  lib/core/GlobalData.dart:341  init  |  await _getAnimeList();
+  lib/core/GlobalData.dart:388  _getAnimeList  |  Future _getAnimeList() async {
+CALLERS
+  _getAnimeList
+  lib/core/GlobalData.dart:328  init  |  _getAnimeList()
+  init
+  lib/ui/page/home.dart:54  _loadData  |  global.init()
 ```
 
-The bundle includes Git status and diff, changed and untracked files, file metadata,
-outlines, source windows, recent history, matches, references, and related outlines.
-Large results include an explicit `CONTEXT_TRUNCATED` marker so the agent knows when it
-needs a narrower scope.
+Seeds come from the same index as `trim ref` plus an `rg -i` pass over string literals (resolved through the same binders as `trim string`). Output is capped like every other command — narrow the keywords or raise `TRIM_MAX_CHARS` when the seed list floods.
 
-### Recommended workflow
+### Context
+
+`trim context` is the recommended starting point: Git status and diff, changed and untracked files, file metadata, outlines, source windows, recent history, and matches — one call, compacted once. Large results carry an explicit `CONTEXT_TRUNCATED` marker so the agent knows to narrow the scope.
 
 ```sh
 trim context                         # understand the current task/change
+trim context diff                    # the current change set and related file context
+trim context path/to/file            # file metadata, outline, diff, history, source windows
 trim context --query "symbol" src    # find definitions, uses, and related files
-trim lines src/file.c 120 180        # exact edit-ready source; preserves whitespace
-trim diff src/file.c                 # inspect the final change
 ```
 
-Use `trim outline <file>` when only the function/class map is needed. Use `trim lines`
-for source that will be edited: indentation, blank lines, trailing spaces, and line
-boundaries are preserved. Search and context output may use lossless `$1`..`$5`
-references for repeated content.
+## Build
+
+The Makefile is the source of truth:
+
+```sh
+make trim        # Linux/macOS (make trim.exe on Windows / MinGW)
+make format      # clang-format all sources
+```
+
+Builds are strict — the full repo warning set is fatal. Sources live in `src/` with the call-tree engine in `src/ref/`.
 
 ## Benchmark
 
-### Historical: capping alone lost (12-task)
-
-Early cap-only runs (aggressive capping, no compaction). 12 tasks from SWE-bench Lite (`deepseek/deepseek-v4-flash`, one session per arm, offline). Repro: `benchmark/run_bench.py`.
-
-| arm | time(s) | steps | fresh tokens | cache (M) | cost$ | gold_touched |
-|-----|---------|-------|--------------|-----------|-------|--------------|
-| **vanilla** | **1,281** | **141** | **169,271** | **23.5** | **0.1184** | 12/12 |
-| rtk | 1,528 | 159 | 171,347 | 26.1 | 0.1360 | 12/12 |
-| trim | 1,879 | 233 | 118,352 | 33.8 | 0.1608 | 12/12 |
-| trimrtk | 2,022 | 225 | 126,502 | 30.6 | 0.1416 | 12/12 |
-
-The lesson of the old design: **the step count is the real cost, not the cap.** Every capping arm cut fresh tokens per step but ran more steps, so all three were slower and pricier than vanilla. `trim rg` capped at ~1000 chars forced the agent to re-issue narrow follow-up searches — that drove the 64-vs-10 rg-call gap and the inflated step count. Capping search output was the wrong lever.
-
-### Latest: path compaction + smart read wins (4-task)
-
-The breakthrough is **compacting search output instead of capping it**: `trim rg`/`fd`/`sg` factor out the common directory root into `$1` and show *all* matches in one call (no truncation-driven follow-ups), while smart `trim read` returns outline + first/last 10 lines for large files. Caps stay as a safety net only (`MAX_CHARS`=5120, `MAX_LINES`=512). Same model, 4-task subset, offline.
+Expected verdict: vanilla wins on disciplined models and short tasks; trim wins on long, wandering sessions — that's the use case it's built for. Repro: `benchmark/run_bench.py` (SWE-bench Lite subset, one session per arm, offline).
 
 | arm | time(s) | steps | fresh tokens | cache (M) | cost$ | gold |
 |-----|---------|-------|--------------|-----------|-------|------|
 | vanilla | 819 | 119 | 99,898 | 11.1 | 0.0659 | 4/4 |
 | **trim** | **622** | **98** | **77,438** | **8.2** | **0.0495** | 4/4 |
 
-With compaction, trim beats vanilla on **every** metric — **−18% steps, −24% time, −25% cost, −22% fresh tokens, −26% cache** — at equal accuracy. This is the "fewer, fatter steps" thesis realized: fewer fresh tokens *and* fewer steps, because compacted search shows more per call without re-querying. The win is consistent (repeated across runs); treat exact margins as approximate since the subset runs aren't perfectly isolated.
-
-### Strengths
-
-- **Reliability & completion:** the uncapped arm sometimes burned context and died mid-session; the capped arms finished all 12 every time.
-- **Stays local & safe:** capping avoided network/host-package detours (curl, reading `site-packages`) that uncapped arms attempted.
-- **Defensive vs huge files:** every read is bounded, so an accidental read of a 1.5 MB file costs a rounding error instead of blowing the context window.
-
-### Weaknesses
-
-- **No accuracy edge measured:** gold-touched is a proxy; it can't separate correct fixes, and real test-pass was not run.
-- **Model-dependent:** if the model already searches well (uses `rg`, avoids whole-file dumps), there's little waste to remove; compaction pays off most on undisciplined models and long sessions.
-- **Single-run noise / imperfect isolation:** the subset runs aren't perfectly isolated (arms can wander into extra task dirs), so treat the margins as approximate, not a precise verdict.
-
-### Example: a huge single file
-
-The benchmark's sympy repo ships a 1.5 MB file:
-
-```
-task05/sympy/integrals/rubi/rubi_tests/tests/test_trinomials.py  → 1,511,293 bytes
-```
-
-**Naive:** `read <file>` → 1,511,293 chars ≈ 377,823 tokens — one file blows a 200k context window by itself.
-
-**trim:** the same one step, but smart `trim read` collapses the huge file to outline + first/last 10 lines:
-
-```
-$ trim read task05/sympy/integrals/rubi/rubi_tests/tests/test_trinomials.py
-    32: def test_1()   1789: def test_2()   2104: def test_3() ...
-    ... (skipped) ...
-    3200: def test_5()
-    [LARGE 3200 lines] use trim lines <file> <start> <end> to read a range
-→ ~300 chars — reveals it's 5 test stubs, no need to read the file
-```
-
-Same step count as the naive read, ~1000x fewer tokens. This matters because the agent can't know the file is huge until it reads it — smart `trim read` turns an accidental read of a giant file into a rounding error instead of blowing the window. The bigger the repo, the more often this accident would happen, so the more the safety matters.
+On that use case, trim beats vanilla on every metric — **−18% steps, −24% time, −25% cost, −22% fresh tokens** — at equal accuracy. An earlier cap-only design (no compaction) lost on all metrics; the lesson drove the current design: compact the output, don't just truncate it. Full history: `benchmark/swe-bench-lite-12.md`.
 
 ## License
 

@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -O2 -s -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wwrite-strings -Wstrict-prototypes
 SRCS = src/main.c src/util.c src/exec.c src/compact.c src/read.c \
-       src/string.c src/context.c src/ref/ref.c src/ref/profile.c \
+       src/string.c src/keyword.c src/context.c src/ref/ref.c src/ref/profile.c \
        src/ref/parse.c src/ref/names.c src/ref/index.c src/ref/engine.c \
        src/ref/rx_compile.c src/ref/rx_match.c
 

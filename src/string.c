@@ -20,7 +20,7 @@
    the codepage can represent the input (true for CJK on CP936 systems);
    the original ACP bytes are still passed to child rg via cmd, which
    restores them to wide chars. */
-static char *argv_to_utf8(const char *s) {
+char *argv_to_utf8(const char *s) {
     int w = MultiByteToWideChar(CP_ACP, 0, s, -1, NULL, 0);
     if (w <= 0)
         return NULL;
@@ -36,16 +36,16 @@ static char *argv_to_utf8(const char *s) {
     return us;
 }
 #else
-static char *argv_to_utf8(const char *s) { return rf_sdup(s); }
+char *argv_to_utf8(const char *s) { return rf_sdup(s); }
 #endif
 
-static const char *const RES_GLOBS[] = {"*.arb",        "*.json", "*.yaml",
-                                        "*.yml",        "*.xml",  "*.strings",
-                                        "*.properties", "*.po",   "*.resx"};
-static const char *const CODE_GLOBS[] = {
-    "!*.arb",  "!*.json",    "!*.yaml",       "!*.yml",
-    "!*.xml",  "!*.strings", "!*.properties", "!*.po",
-    "!*.resx", "!*.lock",    "!*.g.dart",     "!*.gr.dart"};
+const char *const RES_GLOBS[9] = {"*.arb",        "*.json", "*.yaml",
+                                  "*.yml",        "*.xml",  "*.strings",
+                                  "*.properties", "*.po",   "*.resx"};
+const char *const CODE_GLOBS[12] = {"!*.arb",        "!*.json",   "!*.yaml",
+                                    "!*.yml",        "!*.xml",    "!*.strings",
+                                    "!*.properties", "!*.po",     "!*.resx",
+                                    "!*.lock",       "!*.g.dart", "!*.gr.dart"};
 
 typedef struct {
     char *file, *content, *key; /* key=NULL for literal hits */
@@ -77,7 +77,7 @@ static void s_add_hit(const char *file, long line, const char *content,
     s_n++;
 }
 
-static int is_resource(const char *path) {
+int is_resource(const char *path) {
     const char *dot = strrchr(path, '.');
     if (!dot || dot == path)
         return 0;
@@ -90,7 +90,7 @@ static int is_resource(const char *path) {
 
 /* drop trailing blanks (and a trailing line-continuation backslash) so hit
    lines print clean; content points into the caller's rg buffer */
-static void trim_content(const char *content) {
+void trim_content(const char *content) {
     char *c = (char *)content;
     size_t n = strlen(c);
     while (n > 0 && (c[n - 1] == ' ' || c[n - 1] == '\t' || c[n - 1] == '\r' ||
@@ -105,8 +105,8 @@ static void trim_content(const char *content) {
 
 /* parse one `path:line:content` rg line; colons inside the path that are
    not followed by a line number (drive letters) are skipped */
-static int parse_rg_line(const char *s, char *file, size_t fcap, long *line,
-                         const char **content) {
+int parse_rg_line(const char *s, char *file, size_t fcap, long *line,
+                  const char **content) {
     for (const char *p = s; *p; p++) {
         if (*p != ':')
             continue;
@@ -139,7 +139,7 @@ static int parse_rg_line(const char *s, char *file, size_t fcap, long *line,
    gettext-style _("needle") yields no key (the string is its own key);
    generic markup words are denied so <value>needle etc. produce nothing.
    Caller frees. */
-static char *extract_key(const char *content, const char *needle) {
+char *extract_key(const char *content, const char *needle) {
     static const char *const DENY[] = {"string", "name",   "value",   "data",
                                        "msgid",  "msgstr", "msgctxt", "text",
                                        "entry",  "key"};
@@ -191,8 +191,8 @@ static char *extract_key(const char *content, const char *needle) {
 }
 
 /* rg with fixed strings; globs narrow (positive) or exclude (negative) */
-static char *run_rg(const char *pattern, const char *path, int words,
-                    const char *const *globs, int nglobs) {
+char *run_rg(const char *pattern, const char *path, int words,
+             const char *const *globs, int nglobs) {
     const char *args[40];
     int ac = 0;
     args[ac++] = "rg";
@@ -215,7 +215,7 @@ static char *run_rg(const char *pattern, const char *path, int words,
 }
 
 /* identifier introduced by #define on this line (e.g. #define HINT_RG "...") */
-static char *define_key(const char *s) {
+char *define_key(const char *s) {
     const char *d = strstr(s, "#define");
     if (!d)
         return NULL;
@@ -240,7 +240,7 @@ static char *define_key(const char *s) {
 
 /* rightmost identifier run ending just before cut (after spaces); malloc'd
    or NULL */
-static char *ident_before(const char *b, const char *cut) {
+char *ident_before(const char *b, const char *cut) {
     const char *q = cut;
     while (q > b && (q[-1] == ' ' || q[-1] == '\t'))
         q--;
@@ -264,7 +264,7 @@ static char *ident_before(const char *b, const char *cut) {
    IDENT = "needle" | IDENT : type = "needle" | IDENT := "needle"
    covers const/let/val/static bindings in C++, Rust, Zig, Kotlin, Swift,
    Dart, Go, JS/TS, Python. malloc'd key or NULL. */
-static char *bind_key(const char *s, const char *needle) {
+char *bind_key(const char *s, const char *needle) {
     static const char *const DENY[] = {"case", "default", "return", "else",
                                        NULL};
     for (const char *p = strstr(s, needle); p; p = strstr(p + 1, needle)) {
@@ -303,8 +303,8 @@ static char *bind_key(const char *s, const char *needle) {
 
 /* identifier bound to the hit line in code: a #define on the line itself, or
    on a continuation line above (lines joined by trailing backslash) */
-static char *code_key(const char *file, long line, const char *content,
-                      const char *needle) {
+char *code_key(const char *file, long line, const char *content,
+               const char *needle) {
     char *k = define_key(content);
     if (k)
         return k;
@@ -335,8 +335,8 @@ static char *code_key(const char *file, long line, const char *content,
         if (k)
             return k;
         char *r = ring[i] + strlen(ring[i]);
-        while (r > ring[i] &&
-               (r[-1] == '\n' || r[-1] == '\r' || r[-1] == ' ' || r[-1] == '\t'))
+        while (r > ring[i] && (r[-1] == '\n' || r[-1] == '\r' || r[-1] == ' ' ||
+                               r[-1] == '\t'))
             r--;
         if (r == ring[i] || r[-1] != '\\')
             break;

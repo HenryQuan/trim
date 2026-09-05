@@ -68,6 +68,12 @@ TRIM_MAX_CHARS=500 trim rg pattern     # per-command output cap (default 5120)
 TRIM_HUMAN=1 trim rg pattern           # disable compaction globally (raw output)
 ```
 
+Terminal output is automatically paged through `TRIM_PAGER`, then `PAGER`.
+The default is `less -FRX` on macOS/Linux (requires `less`) and `more` on Windows.
+The Unix default exits automatically for short output, preserves ANSI colors,
+and leaves output in the terminal. Paging shows uncompressed output with raised
+limits. Set `TRIM_NO_PAGER=1` to disable it; piped output never uses a pager.
+
 ### Reading files
 
 Smart `trim read` turns an accidental read of a giant file into a rounding error — a 1.5 MB file collapses to an outline plus first/last lines:

@@ -11,8 +11,7 @@
 
 int _CRT_glob = 0;
 
-/* man-style paging: only when stdout is a real terminal. agents capture
-   output through pipes, so they keep the capped raw behavior unchanged. */
+/* Page terminal output; captured output keeps its normal limits. */
 static FILE *pager_fp;
 
 static void close_pager(void) {
@@ -56,8 +55,13 @@ static void setup_pager(void) {
     const char *pg = getenv("TRIM_PAGER");
     if (!pg || !*pg)
         pg = getenv("PAGER");
-    if (!pg || !*pg)
+    if (!pg || !*pg) {
+#ifdef _WIN32
         pg = "more";
+#else
+        pg = "less -FRX";
+#endif
+    }
 #ifdef _WIN32
     pager_fp = _popen(pg, "w");
 #else

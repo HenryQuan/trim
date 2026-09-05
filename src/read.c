@@ -35,7 +35,7 @@ static void oflush(void) {
     obuf[olen] = '\0';
     size_t cn = olen;
     char *comp = obuf;
-    if (!exact_flush)
+    if (!exact_flush && !HUMAN)
         comp = compact_paths(obuf, &cn);
     fwrite(comp, 1, cn, stdout);
     if (cn && comp[cn - 1] != '\n')
@@ -54,22 +54,10 @@ void read_lines(const char *path, int start, int end) {
         fprintf(stderr, "error: cannot open %s\n", path);
         exit(1);
     }
-    char tmp[4096];
-    size_t total = 0;
-    int ln = 0;
-    while (fgets(tmp, sizeof(tmp), f)) {
-        ln++;
-        if (ln < start)
-            continue;
-        if (end > 0 && ln > end)
-            break;
-        total += strlen(tmp);
-    }
-    rewind(f);
 
     char line[4096];
     int lineno = 0, truncated = 0;
-    size_t emitted = 0, echars = 0;
+    size_t echars = 0;
     while (fgets(line, sizeof(line), f)) {
         lineno++;
         if (lineno < start)
@@ -84,16 +72,11 @@ void read_lines(const char *path, int start, int end) {
             truncated = 1;
             break;
         }
-        if (!emitted)
-            ofmt("[T:%zu/%zu]FILE:%s@%d", (size_t)MAX_CHARS, total, path,
-                 lineno);
         oadd(pre);
         oadd(line);
-        echars += strlen(pre) + len + 1, emitted++;
+        echars += strlen(pre) + len + 1;
     }
     fclose(f);
-    if (!emitted)
-        ofmt("[T:%d/%zu]FILE:%s@0", (int)MAX_CHARS, total, path);
     if (truncated) {
         oadd(" — ");
         oadd(pick_hint_ctx(""));

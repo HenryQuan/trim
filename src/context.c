@@ -420,8 +420,8 @@ static void add_query_context(Text *t, const char *pattern, const char *path) {
 static void emit_context(Text *t) {
     if (!t->data)
         return;
-    size_t compact_n = 0;
-    char *compact = compact_paths(t->data, &compact_n);
+    size_t compact_n = t->len;
+    char *compact = HUMAN ? NULL : compact_paths(t->data, &compact_n);
     if (!compact)
         compact = t->data;
     if (compact_n <= MAX_CHARS) {

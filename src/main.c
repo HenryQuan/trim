@@ -27,6 +27,9 @@ static const char *HELP =
     "trim lines)\n"
     "  trim outline <file>            extract function/class signatures "
     "(ast-grep)\n"
+    "  trim ref <symbol> [path] [--depth N]\n"
+    "                                 call-tree: callees + callers of symbol "
+    "by file, function, line (ast-grep)\n"
     "  trim diff [<file>]             git diff (read-only)\n"
     "  trim blame <file>              git blame (read-only)\n"
     "  trim log [<args>]              git log (read-only)\n"
@@ -117,6 +120,11 @@ int main(int argc, char **argv) {
 
     if (!strcmp(cmd, "context")) {
         cmd_context(argc - 2, (const char *const *)argv + 2);
+        return 0;
+    }
+
+    if (!strcmp(cmd, "ref")) {
+        cmd_ref(argc - 2, (const char *const *)argv + 2);
         return 0;
     }
 

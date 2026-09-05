@@ -26,6 +26,7 @@
 
 extern size_t MAX_CHARS;
 extern size_t MAX_LINES;
+extern int HUMAN;
 
 /* util.c — config + text processing */
 void init_max_chars(void);
@@ -67,5 +68,8 @@ void cmd_log(int argc, const char *const *argv);
 
 /* context.c — enriched, single-call workspace context */
 void cmd_context(int argc, const char *const *argv);
+
+/* ref.c — call-tree references via ast-grep (+ rg fallback) */
+void cmd_ref(int argc, const char *const *argv);
 
 #endif

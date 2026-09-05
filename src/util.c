@@ -2,6 +2,7 @@
 
 size_t MAX_CHARS = 5120;
 size_t MAX_LINES = 512;
+int HUMAN = 0;
 
 void init_max_chars(void) {
     char *env = getenv("TRIM_MAX_CHARS");
@@ -16,6 +17,8 @@ void init_max_chars(void) {
         if (v > 0)
             MAX_LINES = v < 100000 ? (size_t)v : 100000;
     }
+    char *envh = getenv("TRIM_HUMAN");
+    HUMAN = envh && *envh && strcmp(envh, "0") != 0;
 }
 
 const char *pick_hint(const char *cmd) {

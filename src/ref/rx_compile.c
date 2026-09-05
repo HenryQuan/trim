@@ -1,4 +1,4 @@
-/* rx_compile.c — pattern compiler for the tiny regex engine
+/* rx_compile.c -- pattern compiler for the tiny regex engine
    (vendored from kokke/tiny-regex-c, public domain / Unlicense) */
 #include "rx.h"
 

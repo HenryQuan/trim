@@ -18,17 +18,17 @@
 
 #define HINT_PAR "prefer trim par \"a\" \"b\" ..."
 #define HINT_CTX                                                               \
-    "prefer trim context — one call for git status, diff, files, "             \
+    "prefer trim context -- one call for git status, diff, files, "            \
     "outlines, refs, history; trim context --query <pattern> "                 \
     "<path> for targeted symbol context"
-#define HINT_RG "capped — try trim outline <file>"
-#define HINT_OUT "capped — try trim rg <pat> <file>"
+#define HINT_RG "capped -- try trim outline <file>"
+#define HINT_OUT "capped -- try trim rg <pat> <file>"
 
 extern size_t MAX_CHARS;
 extern size_t MAX_LINES;
 extern int HUMAN;
 
-/* util.c — config + text processing */
+/* util.c -- config + text processing */
 void init_max_chars(void);
 const char *pick_hint(const char *cmd);
 const char *pick_hint_ctx(const char *cmd);
@@ -45,7 +45,7 @@ size_t collapse_spaces(char *s, size_t n);
 size_t rtrim_lines(char *s, size_t n);
 int is_blank_line(const char *s);
 
-/* exec.c — command execution */
+/* exec.c -- command execution */
 int run_cmd_str(const char *cmd);
 void run_cmd(const char *const *args, int argc);
 char *run_capture(const char *cmd);
@@ -54,11 +54,11 @@ char *run_capture_raw(const char *cmd);
 char *run_cmd_capture_raw(const char *const *args, int argc);
 void cmd_par(int argc, const char *const *argv);
 
-/* compact.c — lossless token compaction for search output */
+/* compact.c -- lossless token compaction for search output */
 char *compact_paths(const char *s, size_t *out_n);
 void cmd_search(const char *const *args, int argc);
 
-/* read.c — file reading + git helpers */
+/* read.c -- file reading + git helpers */
 void read_smart(const char *path);
 void read_lines(const char *path, int start, int end);
 void cmd_outline(int argc, const char *const *argv);
@@ -66,16 +66,16 @@ void cmd_diff(const char *file);
 void cmd_blame(const char *file);
 void cmd_log(int argc, const char *const *argv);
 
-/* context.c — enriched, single-call workspace context */
+/* context.c -- enriched, single-call workspace context */
 void cmd_context(int argc, const char *const *argv);
 
-/* ref.c — call-tree references via ast-grep (+ rg fallback) */
+/* ref.c -- call-tree references via ast-grep (+ rg fallback) */
 void cmd_ref(int argc, const char *const *argv);
 
-/* string.c — string -> bound key -> translations + call sites (+ rg) */
+/* string.c -- string -> bound key -> translations + call sites (+ rg) */
 void cmd_string(int argc, const char *const *argv);
 
-/* string.c — binding resolvers + rg helpers shared with keyword.c */
+/* string.c -- binding resolvers + rg helpers shared with keyword.c */
 extern const char *const RES_GLOBS[9];
 extern const char *const CODE_GLOBS[12];
 char *argv_to_utf8(const char *s);
@@ -92,7 +92,7 @@ char *code_key(const char *file, long line, const char *content,
 char *run_rg(const char *pattern, const char *path, int words,
              const char *const *globs, int nglobs);
 
-/* keyword.c — fuzzy keyword -> symbols/strings -> refs + callers (xref) */
+/* keyword.c -- fuzzy keyword -> symbols/strings -> refs + callers (xref) */
 void cmd_keyword(int argc, const char *const *argv);
 
 #endif

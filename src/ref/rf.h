@@ -1,4 +1,4 @@
-/* rf.h — shared internals for trim ref (the files in src/ref/).
+/* rf.h -- shared internals for trim ref (the files in src/ref/).
    Syntax-level call-tree engine over `ast-grep run --kind` passes.
    Limitations: no type resolution; same-named functions merge. */
 #ifndef REF_RF_H
@@ -42,19 +42,19 @@ typedef struct {
     size_t len, cap;
 } Buf;
 
-/* parse.c — string/buffer helpers + ast-grep --json=compact parsing */
+/* parse.c -- string/buffer helpers + ast-grep --json=compact parsing */
 char *rf_sdup(const char *s);
 void rf_buf_addn(Buf *b, const char *s, size_t n);
 void rf_buf_add(Buf *b, const char *s);
 void rf_buf_addf(Buf *b, const char *fmt, ...);
 GrepHit *rf_parse_hits(const char *json, int *out_n);
 
-/* names.c — identifier extraction from node text */
+/* names.c -- identifier extraction from node text */
 char *rf_name_from_text(const char *text);
 char *rf_callee_from_call(const char *text);
 const char *rf_last_segment(const char *sym);
 
-/* index.c — callee -> sites / def tables */
+/* index.c -- callee -> sites / def tables */
 extern Callee *rf_callees;
 extern int rf_ncallees;
 extern Def *rf_defs;
@@ -75,7 +75,7 @@ int rf_name_matches(const char *name, int mode, const char *pat,
 int rf_find_defs_by(const char *pat, int mode, const void *re, int *out,
                     int max);
 
-/* engine.c — ast-grep runs, small helpers, output */
+/* engine.c -- ast-grep runs, small helpers, output */
 int rf_run_kind(const char *kind, const char *lang, const char *path,
                 int want_defs);
 int rf_def_at(const char *file, long line);
@@ -85,10 +85,10 @@ void rf_first_line(const char *text, char *out, size_t cap);
 void rf_emit_capped(Buf *b, const char *tag);
 void rf_emit_ref(Buf *b);
 
-/* profile.c — index one path across all language profiles */
+/* profile.c -- index one path across all language profiles */
 void rf_scan(const char *path);
 
-/* engine.c — text-level rg fallback when ast-grep indexes are empty */
+/* engine.c -- text-level rg fallback when ast-grep indexes are empty */
 void rf_rg_fallback(Buf *out, const char *target, const char *path);
 
 #endif

@@ -1,4 +1,4 @@
-/* parse.c — string/buffer helpers + ast-grep --json=compact parsing */
+/* parse.c -- string/buffer helpers + ast-grep --json=compact parsing */
 #include <ctype.h>
 #include <stdarg.h>
 

@@ -111,7 +111,7 @@ trim ref '^_?get[A-Z]' lib/ --re     # regex roots (tiny built-in engine: ^ $ . 
 ```
 $ trim string "prefer trim context"
 1 LITERAL
-  src/trim.h:21:    "prefer trim context — one call for git status, diff, files, "
+  src/trim.h:21:    "prefer trim context -- one call for git status, diff, files, "
 2 KEY
   HINT_CTX
 3 TRANSLATIONS

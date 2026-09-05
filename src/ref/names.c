@@ -1,4 +1,4 @@
-/* names.c — identifier extraction from ast-grep node text */
+/* names.c -- identifier extraction from ast-grep node text */
 #include <ctype.h>
 
 #include "../trim.h"

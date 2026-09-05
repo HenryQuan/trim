@@ -78,7 +78,7 @@ void read_lines(const char *path, int start, int end) {
     }
     fclose(f);
     if (truncated) {
-        oadd(" — ");
+        oadd(" -- ");
         oadd(pick_hint_ctx(""));
     }
     oadd("\n");

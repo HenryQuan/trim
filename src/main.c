@@ -1,12 +1,12 @@
 #include "trim.h"
 
 #ifdef _WIN32
-#include <windows.h>
+#include <fcntl.h>
 #include <io.h>
-#include <fcntl.h>
+#include <windows.h>
 #else
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 #endif
 
 int _CRT_glob = 0;
@@ -136,9 +136,13 @@ static const char *HELP =
 
 int main(int argc, char **argv) {
     init_max_chars();
+#ifdef _WIN32
+    /* set the console codepage before spawning the pager: more and other
+       children write bytes that the console decodes with this codepage */
+    SetConsoleOutputCP(CP_UTF8);
+#endif
     setup_pager();
 #ifdef _WIN32
-    SetConsoleOutputCP(CP_UTF8);
     _setmode(_fileno(stdout), _O_BINARY);
 #endif
     if (argc < 2 || !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {

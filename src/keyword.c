@@ -1,4 +1,4 @@
-/* keyword.c — trim keyword <kw...> [path] [--depth N]
+/* keyword.c -- trim keyword <kw...> [path] [--depth N]
    IDA-style xref exploration from fuzzy memory: keywords -> matching
    symbols + string-bound identifiers (ranked by distinct keywords hit) ->
    every textual reference with its enclosing function -> callers walked
@@ -203,7 +203,7 @@ void cmd_keyword(int argc, const char *const *argv) {
                         nkw);
     }
     if (nsd > nshown)
-        rf_buf_addf(&out, "  (%d more — narrow keywords)\n", nsd - nshown);
+        rf_buf_addf(&out, "  (%d more -- narrow keywords)\n", nsd - nshown);
 
     /* ---- REFERENCES: every textual site, with enclosing function ---- */
     rf_buf_add(&out, "REFERENCES\n");
@@ -236,7 +236,7 @@ void cmd_keyword(int argc, const char *const *argv) {
             ln = nl + 1;
         }
         if (total > SITE_MAX)
-            rf_buf_addf(&out, "  (%d more sites — narrow keywords)\n",
+            rf_buf_addf(&out, "  (%d more sites -- narrow keywords)\n",
                         total - SITE_MAX);
         free(code);
     }

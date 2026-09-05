@@ -1,4 +1,4 @@
-/* engine.c — ast-grep runs, small helpers, compacted output */
+/* engine.c -- ast-grep runs, small helpers, compacted output */
 #include "../trim.h"
 #include "rf.h"
 
@@ -79,7 +79,7 @@ void rf_first_line(const char *text, char *out, size_t cap) {
 
 /* text-level rg fallback when ast-grep is missing or nothing indexed */
 void rf_rg_fallback(Buf *out, const char *target, const char *path) {
-    rf_buf_add(out, "ast-grep indexes empty — rg fallback (text-level):\n");
+    rf_buf_add(out, "ast-grep indexes empty -- rg fallback (text-level):\n");
     const char *args[10];
     int ac = 0;
     args[ac++] = "rg";

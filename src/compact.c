@@ -1,7 +1,7 @@
 #include "trim.h"
 
 #define MAX_DICT                                                               \
-    5 /* refs $1..$5 — keep more repeated context in one result              \
+    5 /* refs $1..$5 -- keep more repeated context in one result               \
        */
 #define MIN_LEN                                                                \
     8 /* catch genuinely-reused short phrases like "pub(crate) fn " */

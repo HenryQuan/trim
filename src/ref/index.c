@@ -1,4 +1,4 @@
-/* index.c — callee -> call-sites and definition tables */
+/* index.c -- callee -> call-sites and definition tables */
 #include <ctype.h>
 
 #include "../trim.h"
@@ -96,7 +96,7 @@ int rf_find_def_by_name(const char *name) {
     return -1;
 }
 
-/* mode: exact | substring (smartcase — all-lowercase pat ignores case) |
+/* mode: exact | substring (smartcase -- all-lowercase pat ignores case) |
    tiny regex (re = compiled re_t from rx.h) */
 int rf_name_matches(const char *name, int mode, const char *pat,
                     const void *re) {

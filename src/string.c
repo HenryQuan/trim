@@ -1,6 +1,6 @@
-/* string.c — trim string <text> [path]
+/* string.c -- trim string <text> [path]
    Find a UI string, resolve the identifier bound to it on the same line
-   (i18n key in JSON/ARB/YAML/properties/XML; the key is optional — a
+   (i18n key in JSON/ARB/YAML/properties/XML; the key is optional -- a
    hardcoded string has none), then report every translation of that key
    plus every code reference, each annotated with its enclosing function
    when the ref engine indexes the language. Input may also be a key
@@ -134,7 +134,7 @@ int parse_rg_line(const char *s, char *file, size_t fcap, long *line,
 /* identifier bound to <needle> on the same line:
    "key": "needle" | key: needle | key=needle | name="key">needle
    value position: skips quotes/colons/equals/angle brackets backwards;
-   key position: needle directly followed by ": — then the needle is the
+   key position: needle directly followed by ": -- then the needle is the
    key itself (input-as-key case). Parentheses stop the scan so
    gettext-style _("needle") yields no key (the string is its own key);
    generic markup words are denied so <value>needle etc. produce nothing.
@@ -434,7 +434,7 @@ void cmd_string(int argc, const char *const *argv) {
         fprintf(stderr, "[sdbg] B nlit=%d nkeys=%d ncode=%d\n", nlit, nkeys,
                 ncode_lit);
     if (!nlit) {
-        rf_buf_add(&out, "  (no literal match — treating input as a key)\n");
+        rf_buf_add(&out, "  (no literal match -- treating input as a key)\n");
         strncpy(keys[0], text_utf8, sizeof(keys[0]) - 1);
         keys[0][sizeof(keys[0]) - 1] = '\0';
         nkeys = 1;
@@ -446,7 +446,7 @@ void cmd_string(int argc, const char *const *argv) {
         nkeys = 1;
     } else if (ncode_lit && !nkeys) {
         rf_buf_addf(&out,
-                    "  (hardcoded in code — %d of the above are call sites)\n",
+                    "  (hardcoded in code -- %d of the above are call sites)\n",
                     ncode_lit);
     }
 

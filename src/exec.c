@@ -204,7 +204,7 @@ char *run_cmd_capture_raw(const char *const *args, int argc) {
     return run_capture_raw(buf);
 }
 
-/* trim par "cmd1" "cmd2" ... — run each command, each output capped separately
+/* trim par "cmd1" "cmd2" ... -- run each command, each output capped separately
  */
 void cmd_par(int argc, const char *const *argv) {
     int shown = 0;

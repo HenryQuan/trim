@@ -1,4 +1,4 @@
-/* profile.c — language profiles and the per-language index pass.
+/* profile.c -- language profiles and the per-language index pass.
    Kinds verified against ast-grep 0.45 for every profiled language. */
 #include "../trim.h"
 #include "rf.h"

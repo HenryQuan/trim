@@ -1,4 +1,4 @@
-/* rx_match.c — matcher for the tiny regex engine
+/* rx_match.c -- matcher for the tiny regex engine
    (vendored from kokke/tiny-regex-c, public domain / Unlicense) */
 #include <ctype.h>
 

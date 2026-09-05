@@ -1,4 +1,4 @@
-/* ref.c — trim ref <symbol> [path] [--depth N]
+/* ref.c -- trim ref <symbol> [path] [--depth N]
    Call-tree lookup: what <symbol> calls (CALLS OUT) and who calls it
    (CALLED BY), grouped by file + enclosing function + line, traversed to
    depth (default 2). Falls back to plain rg when ast-grep is missing or
@@ -65,7 +65,7 @@ void cmd_ref(int argc, const char *const *argv) {
     int ntotal = rf_find_defs_by(target, mode, re, roots, 50);
     int nroots = ntotal < 50 ? ntotal : 50;
     if (ntotal == 0) {
-        rf_buf_addf(&out, "  (no def matches %s — %s)\n", target, modestr);
+        rf_buf_addf(&out, "  (no def matches %s -- %s)\n", target, modestr);
     } else {
         int dvcap = 0, ndvis = 0;
         char **dvis = NULL;
@@ -117,7 +117,7 @@ void cmd_ref(int argc, const char *const *argv) {
         }
         free(dfront);
         if (ntotal > nroots)
-            rf_buf_addf(&out, "  (%d more def matches — narrow pattern)\n",
+            rf_buf_addf(&out, "  (%d more def matches -- narrow pattern)\n",
                         ntotal - nroots);
         for (int i = 0; i < ndvis; i++)
             free(dvis[i]);
@@ -135,7 +135,7 @@ void cmd_ref(int argc, const char *const *argv) {
         if (rf_name_matches(rf_callees[ci].name, mode, target, re))
             cbtotal++;
     if (cbtotal == 0) {
-        rf_buf_addf(&out, "  (no callee matches %s — %s)\n", target, modestr);
+        rf_buf_addf(&out, "  (no callee matches %s -- %s)\n", target, modestr);
     } else {
         int cbshown = 0;
         for (int ci = 0; ci < rf_ncallees && cbshown < 50; ci++) {
@@ -181,7 +181,7 @@ void cmd_ref(int argc, const char *const *argv) {
             fcap = ncap;
         }
         if (cbtotal > cbshown)
-            rf_buf_addf(&out, "  (%d more callee matches — narrow pattern)\n",
+            rf_buf_addf(&out, "  (%d more callee matches -- narrow pattern)\n",
                         cbtotal - cbshown);
     }
 

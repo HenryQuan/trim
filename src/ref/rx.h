@@ -1,4 +1,4 @@
-/* rx.h — tiny regex engine (vendored from kokke/tiny-regex-c, public
+/* rx.h -- tiny regex engine (vendored from kokke/tiny-regex-c, public
    domain / Unlicense; Rob Pike-style matcher). Split for the <200-line
    rule: types here, compile in rx_compile.c, match in rx_match.c.
 
@@ -37,7 +37,7 @@ typedef struct regex_t {
 
 typedef regex_t *re_t;
 
-/* compile pattern; NULL on invalid/too-large pattern (static storage —
+/* compile pattern; NULL on invalid/too-large pattern (static storage --
    one live pattern per process, fine for a one-shot CLI) */
 re_t re_compile(const char *pattern);
 
